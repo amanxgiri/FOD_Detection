@@ -20,6 +20,7 @@ Milestone 7 endpoints:
 - `GET /api/v1/detections`
 - `GET /api/v1/detections/{detection_id}`
 - `GET /api/v1/detections/{detection_id}/evidence`
+- `POST /api/v1/detections/{detection_id}/acknowledge`
 
 Milestone 9 endpoint:
 

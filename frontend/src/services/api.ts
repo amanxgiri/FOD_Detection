@@ -1,4 +1,5 @@
 import type { SystemStatusResponse } from "../types/system";
+import type { DetectionSummary } from "../types/detection";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 export const STREAM_URL = `${API_BASE_URL}/stream`;
@@ -17,4 +18,20 @@ export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
     throw new Error(`System status request failed: ${response.status}`);
   }
   return response.json() as Promise<SystemStatusResponse>;
+}
+
+export async function acknowledgeDetection(detectionId: string): Promise<DetectionSummary> {
+  const response = await fetch(`${API_BASE_URL}/detections/${detectionId}/acknowledge`, {
+    method: "POST"
+  });
+  if (!response.ok) {
+    throw new Error(`Acknowledge request failed: ${response.status}`);
+  }
+  const body = await response.json();
+  return {
+    id: body.id,
+    className: body.class_name,
+    confidence: body.confidence,
+    status: body.status
+  } as DetectionSummary;
 }

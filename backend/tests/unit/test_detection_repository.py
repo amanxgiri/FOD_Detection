@@ -45,6 +45,26 @@ def test_detection_repository_acknowledges_detection(tmp_path) -> None:
     session.close()
 
 
+def test_detection_repository_repeat_acknowledgement_preserves_timestamp(tmp_path) -> None:
+    session_factory = create_test_session_factory(tmp_path)
+    session = session_factory()
+    repository = DetectionRepository(session)
+    detection = Detection(1, "Bolt", 0.91, BoundingBox(1, 2, 20, 30))
+    repository.create_detection(
+        detection_id="DET-20260707-000001",
+        event_timestamp=datetime(2026, 7, 7, 9, 0, tzinfo=UTC),
+        detection=detection,
+        evidence_path="2026/07/07/DET-20260707-000001.jpg",
+    )
+    first = repository.acknowledge_detection("DET-20260707-000001")
+    second = repository.acknowledge_detection("DET-20260707-000001")
+
+    assert first is not None
+    assert second is not None
+    assert second.acknowledged_at == first.acknowledged_at
+    session.close()
+
+
 def create_test_session_factory(tmp_path):
     engine = create_database_engine(f"sqlite:///{tmp_path / 'fod-test.db'}")
     init_database(engine)

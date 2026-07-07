@@ -41,6 +41,12 @@ class FodDetectedData(BaseModel):
     evidence_url: str
 
 
+class FodAcknowledgedData(BaseModel):
+    detection_id: str
+    status: str
+    acknowledged_at: datetime
+
+
 class SystemWarningData(BaseModel):
     message: str
 

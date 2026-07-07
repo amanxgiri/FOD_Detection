@@ -6,6 +6,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.websocket.events import FodAcknowledgedData, make_event
+from app.api.websocket.connection_manager import WebSocketConnectionManager
 from app.schemas.detection import (
     BoundingBoxResponse,
     DetectionDetailResponse,
@@ -78,11 +80,52 @@ def get_detection_evidence(
     return FileResponse(path, media_type="image/jpeg")
 
 
+@router.post("/{detection_id}/acknowledge", response_model=DetectionDetailResponse)
+async def acknowledge_detection(
+    detection_id: str,
+    request: Request,
+    session: Session = Depends(get_db_session),
+) -> DetectionDetailResponse:
+    repository = DetectionRepository(session)
+    try:
+        record = repository.acknowledge_detection(detection_id)
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=500, detail="database update failed") from exc
+    if record is None:
+        raise HTTPException(status_code=404, detail="detection not found")
+
+    if record.acknowledged_at is not None:
+        manager = get_websocket_manager(request)
+        await manager.broadcast(
+            make_event(
+                "fod.acknowledged",
+                FodAcknowledgedData(
+                    detection_id=record.id,
+                    status=record.status,
+                    acknowledged_at=record.acknowledged_at,
+                ),
+            )
+        )
+    return to_detail(record, request)
+
+
 def get_evidence_store(request: Request) -> EvidenceStore:
     store: EvidenceStore | None = getattr(request.app.state, "evidence_store", None)
     if store is None:
         raise HTTPException(status_code=503, detail="evidence store is not initialized")
     return store
+
+
+def get_websocket_manager(request: Request) -> WebSocketConnectionManager:
+    manager: WebSocketConnectionManager | None = getattr(
+        request.app.state,
+        "websocket_manager",
+        None,
+    )
+    if manager is None:
+        manager = WebSocketConnectionManager()
+        request.app.state.websocket_manager = manager
+    return manager
 
 
 def get_record_or_404(detection_id: str, session: Session) -> DetectionRecord:

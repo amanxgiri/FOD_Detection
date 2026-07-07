@@ -8,6 +8,7 @@ interface DetectionSocketState {
   latestAlert: FodDetectedEvent | null;
   latestEvent: AlertEvent | null;
   error: string | null;
+  clearLatestAlert: (detectionId: string) => void;
 }
 
 const RECONNECT_MS = 2000;
@@ -17,7 +18,8 @@ export function useDetectionSocket(enabled = true): DetectionSocketState {
     connected: false,
     latestAlert: null,
     latestEvent: null,
-    error: null
+    error: null,
+    clearLatestAlert
   });
   const reconnectTimer = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -44,6 +46,10 @@ export function useDetectionSocket(enabled = true): DetectionSocketState {
           latestAlert:
             event.type === "fod.detected"
               ? (event as AlertEvent<FodDetectedData>)
+              : event.type === "fod.acknowledged" &&
+                  current.latestAlert?.data.detection_id ===
+                    (event.data as { detection_id?: string }).detection_id
+                ? null
               : current.latestAlert
         }));
       };
@@ -76,4 +82,12 @@ export function useDetectionSocket(enabled = true): DetectionSocketState {
   }, [enabled]);
 
   return state;
+
+  function clearLatestAlert(detectionId: string) {
+    setState((current) => ({
+      ...current,
+      latestAlert:
+        current.latestAlert?.data.detection_id === detectionId ? null : current.latestAlert
+    }));
+  }
 }

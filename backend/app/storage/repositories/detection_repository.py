@@ -61,6 +61,8 @@ class DetectionRepository:
         record = self.get_detection(detection_id)
         if record is None:
             return None
+        if record.status == "ACKNOWLEDGED" and record.acknowledged_at is not None:
+            return record
         record.status = "ACKNOWLEDGED"
         record.acknowledged_at = acknowledged_at or datetime.now(UTC)
         record.updated_at = datetime.now(UTC)

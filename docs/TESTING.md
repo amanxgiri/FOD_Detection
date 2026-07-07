@@ -29,3 +29,7 @@ spatially separate, expired, and disabled-validation cases.
 
 Milestone 9 WebSocket alert validation checks event schema, connection cleanup,
 broadcast delivery, frontend type checking, and the smoke-test connection path.
+
+Milestone 10 acknowledgement validation checks REST status updates,
+deterministic repeated acknowledgement, `fod.acknowledged` event schema, and
+frontend acknowledgement state.

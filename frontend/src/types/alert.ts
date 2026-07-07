@@ -13,6 +13,12 @@ export interface FodDetectedData {
   evidence_url: string;
 }
 
+export interface FodAcknowledgedData {
+  detection_id: string;
+  status: "ACKNOWLEDGED";
+  acknowledged_at: string;
+}
+
 export type AlertEventType =
   | "fod.detected"
   | "fod.acknowledged"
@@ -27,3 +33,4 @@ export interface AlertEvent<TData = unknown> {
 }
 
 export type FodDetectedEvent = AlertEvent<FodDetectedData>;
+export type FodAcknowledgedEvent = AlertEvent<FodAcknowledgedData>;

@@ -53,6 +53,48 @@ def test_detection_detail_returns_404_for_missing_record(tmp_path) -> None:
     assert response.status_code == 404
 
 
+def test_acknowledge_detection_updates_status_and_is_repeatable(tmp_path) -> None:
+    app = create_app()
+    configure_test_storage(app, tmp_path)
+    session = app.state.session_factory()
+    timestamp = datetime(2026, 7, 7, 9, 0, tzinfo=UTC)
+    detection = Detection(1, "Bolt", 0.91, BoundingBox(1, 2, 20, 30))
+    evidence_path = app.state.evidence_store.save(
+        "DET-20260707-000001",
+        np.full((20, 30, 3), 120, dtype=np.uint8),
+        timestamp,
+    )
+    DetectionRepository(session).create_detection(
+        detection_id="DET-20260707-000001",
+        event_timestamp=timestamp,
+        detection=detection,
+        evidence_path=evidence_path,
+    )
+    session.close()
+    client = TestClient(app)
+
+    first = client.post("/api/v1/detections/DET-20260707-000001/acknowledge")
+    second = client.post("/api/v1/detections/DET-20260707-000001/acknowledge")
+    history = client.get("/api/v1/detections?status=ACKNOWLEDGED")
+
+    assert first.status_code == 200
+    assert first.json()["status"] == "ACKNOWLEDGED"
+    assert first.json()["acknowledged_at"] is not None
+    assert second.status_code == 200
+    assert second.json()["acknowledged_at"] == first.json()["acknowledged_at"]
+    assert history.json()["items"][0]["status"] == "ACKNOWLEDGED"
+
+
+def test_acknowledge_missing_detection_returns_404(tmp_path) -> None:
+    app = create_app()
+    configure_test_storage(app, tmp_path)
+    client = TestClient(app)
+
+    response = client.post("/api/v1/detections/DET-missing/acknowledge")
+
+    assert response.status_code == 404
+
+
 def test_detection_history_reports_database_initialization_failure() -> None:
     app = create_app()
     app.state.session_factory = None
