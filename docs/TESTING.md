@@ -5,3 +5,7 @@ and relevant regression tests before moving to the next milestone.
 
 Milestone 2 camera capture can be validated without a physical camera by using
 `backend/tests/fixtures/test_runway.avi` with `scripts/check_camera.py`.
+
+Milestone 3 source-model validation can be run with `scripts/check_model.py`.
+`scripts/export_tensorrt.py --check-prerequisites-only` should fail clearly on
+machines without CUDA/TensorRT prerequisites.
