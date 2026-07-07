@@ -13,3 +13,6 @@ machines without CUDA/TensorRT prerequisites.
 Milestone 4 inference-worker behavior is validated with a fake model adapter so
 frame skipping, worker error handling, post-processing, and metrics can be tested
 without requiring a TensorRT engine.
+
+Milestone 5 streaming checks use `frame_limit=1` to validate the MJPEG response
+without leaving an infinite test stream open.

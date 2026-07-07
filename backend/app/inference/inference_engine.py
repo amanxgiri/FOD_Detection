@@ -7,8 +7,10 @@ from dataclasses import dataclass
 from app.camera.frame_buffer import LatestFrameBuffer
 from app.camera.types import FramePacket
 from app.detection.types import Detection
+from app.inference.annotated_frame_store import AnnotatedFrame, LatestAnnotatedFrameStore
 from app.inference.model_adapter import ModelAdapter
 from app.inference.postprocessor import PostProcessor
+from app.inference.renderer import FrameRenderer
 from app.monitoring.performance_monitor import PerformanceMonitor
 
 
@@ -26,12 +28,16 @@ class InferenceEngine:
         model_adapter: ModelAdapter,
         postprocessor: PostProcessor,
         performance_monitor: PerformanceMonitor,
+        frame_renderer: FrameRenderer | None = None,
+        annotated_frame_store: LatestAnnotatedFrameStore | None = None,
         poll_timeout_seconds: float = 0.2,
     ) -> None:
         self._frame_buffer = frame_buffer
         self._model_adapter = model_adapter
         self._postprocessor = postprocessor
         self._performance_monitor = performance_monitor
+        self._frame_renderer = frame_renderer
+        self._annotated_frame_store = annotated_frame_store
         self._poll_timeout_seconds = poll_timeout_seconds
 
         self._lock = threading.Lock()
@@ -101,6 +107,15 @@ class InferenceEngine:
                 detections=detections,
                 inference_ms=inference_ms,
             )
+            if self._frame_renderer is not None and self._annotated_frame_store is not None:
+                annotated = self._frame_renderer.render(packet.frame, detections)
+                self._annotated_frame_store.publish(
+                    AnnotatedFrame(
+                        sequence_id=packet.sequence_id,
+                        captured_at=packet.captured_at,
+                        frame=annotated,
+                    )
+                )
             with self._lock:
                 self._latest_result = result
                 self._last_error = None

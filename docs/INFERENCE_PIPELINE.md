@@ -10,3 +10,6 @@ generation must be run on a CUDA/TensorRT-capable machine and must not fall back
 Milestone 4 adds the decoupled inference worker. It waits on `LatestFrameBuffer`,
 processes only newer sequence IDs, counts skipped frames, applies deterministic
 post-processing, and records bounded performance metrics.
+
+Milestone 5 adds annotation rendering and MJPEG streaming. The stream endpoint
+only reads `LatestAnnotatedFrameStore`; it does not run inference from the route.

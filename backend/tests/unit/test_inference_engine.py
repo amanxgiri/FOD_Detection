@@ -6,7 +6,9 @@ import numpy as np
 from app.camera.frame_buffer import LatestFrameBuffer
 from app.camera.types import FramePacket
 from app.inference.inference_engine import InferenceEngine
+from app.inference.annotated_frame_store import LatestAnnotatedFrameStore
 from app.inference.postprocessor import PostProcessor
+from app.inference.renderer import FrameRenderer
 from app.inference.types import RawDetection
 from app.monitoring.performance_monitor import PerformanceMonitor
 
@@ -111,6 +113,29 @@ def test_inference_engine_records_error_and_continues() -> None:
     assert engine.get_latest_result() is not None
     assert monitor.snapshot().frames_inferred == 1
     assert adapter.calls == 2
+
+
+def test_inference_engine_publishes_annotated_frame() -> None:
+    buffer = LatestFrameBuffer()
+    store = LatestAnnotatedFrameStore()
+    engine = InferenceEngine(
+        frame_buffer=buffer,
+        model_adapter=FakeModelAdapter(),
+        postprocessor=PostProcessor(),
+        performance_monitor=PerformanceMonitor(),
+        frame_renderer=FrameRenderer(),
+        annotated_frame_store=store,
+        poll_timeout_seconds=0.01,
+    )
+
+    engine.start()
+    buffer.publish(make_packet(1))
+    annotated = store.wait_for_newer(0, timeout=1.0)
+    engine.stop()
+
+    assert annotated is not None
+    assert annotated.sequence_id == 1
+    assert annotated.frame.any()
 
 
 def wait_for(predicate: object, timeout_seconds: float = 1.0) -> None:
