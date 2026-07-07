@@ -23,3 +23,6 @@ frontend type checking, and frontend production build.
 Milestone 7 persistence validation uses temporary SQLite databases and evidence
 directories for repository and API tests. The smoke test now verifies the
 detection history endpoint initializes successfully.
+
+Milestone 8 temporal validation tests cover persistent, intermittent, isolated,
+spatially separate, expired, and disabled-validation cases.

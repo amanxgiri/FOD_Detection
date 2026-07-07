@@ -13,3 +13,7 @@ post-processing, and records bounded performance metrics.
 
 Milestone 5 adds annotation rendering and MJPEG streaming. The stream endpoint
 only reads `LatestAnnotatedFrameStore`; it does not run inference from the route.
+
+Milestone 8 adds temporal validation. The inference worker keeps post-processed
+detections for rendering and exposes newly confirmed detections separately for
+later alert generation.

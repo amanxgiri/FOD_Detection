@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from app.camera.frame_buffer import LatestFrameBuffer
 from app.camera.types import FramePacket
 from app.detection.types import Detection
+from app.detection.temporal_validator import TemporalValidator
 from app.inference.annotated_frame_store import AnnotatedFrame, LatestAnnotatedFrameStore
 from app.inference.model_adapter import ModelAdapter
 from app.inference.postprocessor import PostProcessor
@@ -18,6 +19,7 @@ from app.monitoring.performance_monitor import PerformanceMonitor
 class InferenceResult:
     sequence_id: int
     detections: list[Detection]
+    confirmed_detections: list[Detection]
     inference_ms: float
 
 
@@ -30,6 +32,7 @@ class InferenceEngine:
         performance_monitor: PerformanceMonitor,
         frame_renderer: FrameRenderer | None = None,
         annotated_frame_store: LatestAnnotatedFrameStore | None = None,
+        temporal_validator: TemporalValidator | None = None,
         poll_timeout_seconds: float = 0.2,
     ) -> None:
         self._frame_buffer = frame_buffer
@@ -38,6 +41,7 @@ class InferenceEngine:
         self._performance_monitor = performance_monitor
         self._frame_renderer = frame_renderer
         self._annotated_frame_store = annotated_frame_store
+        self._temporal_validator = temporal_validator
         self._poll_timeout_seconds = poll_timeout_seconds
 
         self._lock = threading.Lock()
@@ -102,9 +106,17 @@ class InferenceEngine:
                 frame_width=frame_width,
                 frame_height=frame_height,
             )
+            if self._temporal_validator is None:
+                confirmed_detections = detections
+            else:
+                confirmed_detections = self._temporal_validator.process(
+                    detections,
+                    sequence_id=packet.sequence_id,
+                )
             result = InferenceResult(
                 sequence_id=packet.sequence_id,
                 detections=detections,
+                confirmed_detections=confirmed_detections,
                 inference_ms=inference_ms,
             )
             if self._frame_renderer is not None and self._annotated_frame_store is not None:
