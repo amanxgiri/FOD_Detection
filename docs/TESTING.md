@@ -19,3 +19,7 @@ without leaving an infinite test stream open.
 
 Milestone 6 dashboard validation includes backend `/api/v1/system/status`,
 frontend type checking, and frontend production build.
+
+Milestone 7 persistence validation uses temporary SQLite databases and evidence
+directories for repository and API tests. The smoke test now verifies the
+detection history endpoint initializes successfully.

@@ -10,6 +10,7 @@ dependencies = [
     "pydantic-settings==2.10.1",
     "numpy==2.2.6",
     "opencv-python-headless==4.12.0.88",
+    "SQLAlchemy==2.0.41",
 ]
 
 [tool.pytest.ini_options]

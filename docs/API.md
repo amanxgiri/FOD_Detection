@@ -14,3 +14,9 @@ Milestone 5 endpoint:
 Milestone 6 endpoint:
 
 - `GET /api/v1/system/status`
+
+Milestone 7 endpoints:
+
+- `GET /api/v1/detections`
+- `GET /api/v1/detections/{detection_id}`
+- `GET /api/v1/detections/{detection_id}/evidence`

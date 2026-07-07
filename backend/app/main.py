@@ -9,6 +9,12 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.inference.annotated_frame_store import LatestAnnotatedFrameStore
 from app.monitoring.performance_monitor import PerformanceMonitor
+from app.storage import (
+    EvidenceStore,
+    create_database_engine,
+    create_session_factory,
+    init_database,
+)
 
 logger = get_logger(__name__)
 
@@ -23,6 +29,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.annotated_frame_store = LatestAnnotatedFrameStore()
     if not hasattr(app.state, "performance_monitor"):
         app.state.performance_monitor = PerformanceMonitor()
+    if not hasattr(app.state, "session_factory"):
+        engine = create_database_engine(settings.database_url)
+        init_database(engine)
+        app.state.database_engine = engine
+        app.state.session_factory = create_session_factory(engine)
+    if not hasattr(app.state, "evidence_store"):
+        app.state.evidence_store = EvidenceStore(settings.evidence_directory)
     yield
     logger.info("application shutdown")
 
@@ -45,6 +58,11 @@ def create_app() -> FastAPI:
     )
     app.state.annotated_frame_store = LatestAnnotatedFrameStore()
     app.state.performance_monitor = PerformanceMonitor()
+    engine = create_database_engine(settings.database_url)
+    init_database(engine)
+    app.state.database_engine = engine
+    app.state.session_factory = create_session_factory(engine)
+    app.state.evidence_store = EvidenceStore(settings.evidence_directory)
     app.include_router(api_router, prefix="/api/v1")
     return app
 

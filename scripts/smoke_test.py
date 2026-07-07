@@ -20,6 +20,10 @@ def main() -> int:
     if status_response.status_code != 200:
         print(f"system status check failed: {status_response.status_code}")
         return 1
+    detections_response = client.get("/api/v1/detections")
+    if detections_response.status_code != 200:
+        print(f"detections check failed: {detections_response.status_code}")
+        return 1
     stream_response = client.get("/api/v1/stream?frame_limit=1")
     if stream_response.status_code != 200:
         print(f"stream check failed: {stream_response.status_code}")
