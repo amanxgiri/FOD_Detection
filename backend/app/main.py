@@ -1,0 +1,44 @@
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.router import api_router
+from app.core.config import get_settings
+from app.core.logging import configure_logging, get_logger
+
+logger = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
+    configure_logging(settings.log_level)
+    logger.info("application startup")
+    app.state.settings = settings
+    yield
+    logger.info("application shutdown")
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+    configure_logging(settings.log_level)
+
+    app = FastAPI(
+        title="FOD Detection Prototype API",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[settings.frontend_origin],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.include_router(api_router, prefix="/api/v1")
+    return app
+
+
+app = create_app()
