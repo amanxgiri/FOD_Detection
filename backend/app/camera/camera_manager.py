@@ -12,6 +12,7 @@ import cv2
 from app.camera.frame_buffer import LatestFrameBuffer
 from app.camera.types import CameraStatus, FramePacket
 from app.core.logging import get_logger
+from app.monitoring.performance_monitor import PerformanceMonitor
 
 logger = get_logger(__name__)
 
@@ -37,11 +38,13 @@ class CameraManager:
         frame_buffer: LatestFrameBuffer,
         reconnect_delay_seconds: float = 2.0,
         capture_factory: CaptureFactory | None = None,
+        performance_monitor: PerformanceMonitor | None = None,
     ) -> None:
         self._source = self._normalize_source(source)
         self._frame_buffer = frame_buffer
         self._reconnect_delay_seconds = reconnect_delay_seconds
         self._capture_factory = capture_factory or cv2.VideoCapture
+        self._performance_monitor = performance_monitor
 
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -148,12 +151,16 @@ class CameraManager:
             frame=frame.copy(),
         )
         self._frame_buffer.publish(packet)
+        if self._performance_monitor is not None:
+            self._performance_monitor.record_capture(packet.captured_at)
         return packet
 
     def _record_read_failure(self) -> None:
         with self._lock:
             self._read_failures += 1
             self._status = CameraStatus.DEGRADED
+        if self._performance_monitor is not None:
+            self._performance_monitor.record_camera_read_failure()
         logger.warning("camera read failed")
 
     def _release_capture(self) -> None:

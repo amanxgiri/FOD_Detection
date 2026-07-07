@@ -6,3 +6,7 @@ Inference is specified for a TensorRT runtime engine generated from
 Milestone 3 adds the model adapter interface, normalized `RawDetection` type,
 TensorRT adapter prerequisite checks, and export/diagnostic scripts. Actual engine
 generation must be run on a CUDA/TensorRT-capable machine and must not fall back to CPU.
+
+Milestone 4 adds the decoupled inference worker. It waits on `LatestFrameBuffer`,
+processes only newer sequence IDs, counts skipped frames, applies deterministic
+post-processing, and records bounded performance metrics.

@@ -9,3 +9,7 @@ Milestone 2 camera capture can be validated without a physical camera by using
 Milestone 3 source-model validation can be run with `scripts/check_model.py`.
 `scripts/export_tensorrt.py --check-prerequisites-only` should fail clearly on
 machines without CUDA/TensorRT prerequisites.
+
+Milestone 4 inference-worker behavior is validated with a fake model adapter so
+frame skipping, worker error handling, post-processing, and metrics can be tested
+without requiring a TensorRT engine.
