@@ -20,3 +20,7 @@ Milestone 7 endpoints:
 - `GET /api/v1/detections`
 - `GET /api/v1/detections/{detection_id}`
 - `GET /api/v1/detections/{detection_id}/evidence`
+
+Milestone 9 endpoint:
+
+- `WS /api/v1/ws/events`

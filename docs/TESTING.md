@@ -26,3 +26,6 @@ detection history endpoint initializes successfully.
 
 Milestone 8 temporal validation tests cover persistent, intermittent, isolated,
 spatially separate, expired, and disabled-validation cases.
+
+Milestone 9 WebSocket alert validation checks event schema, connection cleanup,
+broadcast delivery, frontend type checking, and the smoke-test connection path.

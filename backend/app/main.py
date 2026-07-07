@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
+from app.api.websocket.connection_manager import WebSocketConnectionManager
 from app.inference.annotated_frame_store import LatestAnnotatedFrameStore
 from app.monitoring.performance_monitor import PerformanceMonitor
 from app.storage import (
@@ -36,6 +37,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.session_factory = create_session_factory(engine)
     if not hasattr(app.state, "evidence_store"):
         app.state.evidence_store = EvidenceStore(settings.evidence_directory)
+    if not hasattr(app.state, "websocket_manager"):
+        app.state.websocket_manager = WebSocketConnectionManager()
     yield
     logger.info("application shutdown")
 
@@ -63,6 +66,7 @@ def create_app() -> FastAPI:
     app.state.database_engine = engine
     app.state.session_factory = create_session_factory(engine)
     app.state.evidence_store = EvidenceStore(settings.evidence_directory)
+    app.state.websocket_manager = WebSocketConnectionManager()
     app.include_router(api_router, prefix="/api/v1")
     return app
 

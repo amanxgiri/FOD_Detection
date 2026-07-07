@@ -156,6 +156,28 @@ h2 {
   padding: 8px 10px;
 }
 
+.connection-ok {
+  background: #e5f5e9;
+  border: 1px solid #89c99b;
+  border-radius: 8px;
+  color: #245d34;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+}
+
+.alert-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.alert-detail img {
+  aspect-ratio: 16 / 9;
+  background: #101820;
+  border-radius: 8px;
+  object-fit: cover;
+  width: 100%;
+}
+
 dl {
   display: grid;
   gap: 10px;

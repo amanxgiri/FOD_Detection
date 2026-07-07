@@ -24,6 +24,8 @@ def main() -> int:
     if detections_response.status_code != 200:
         print(f"detections check failed: {detections_response.status_code}")
         return 1
+    with client.websocket_connect("/api/v1/ws/events") as websocket:
+        websocket.send_text("smoke")
     stream_response = client.get("/api/v1/stream?frame_limit=1")
     if stream_response.status_code != 200:
         print(f"stream check failed: {stream_response.status_code}")
