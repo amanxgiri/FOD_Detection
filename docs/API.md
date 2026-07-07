@@ -10,3 +10,7 @@ Milestone 1 endpoints:
 Milestone 5 endpoint:
 
 - `GET /api/v1/stream`
+
+Milestone 6 endpoint:
+
+- `GET /api/v1/system/status`

@@ -16,6 +16,10 @@ def main() -> int:
     if response.status_code != 200:
         print(f"health check failed: {response.status_code}")
         return 1
+    status_response = client.get("/api/v1/system/status")
+    if status_response.status_code != 200:
+        print(f"system status check failed: {status_response.status_code}")
+        return 1
     stream_response = client.get("/api/v1/stream?frame_limit=1")
     if stream_response.status_code != 200:
         print(f"stream check failed: {stream_response.status_code}")

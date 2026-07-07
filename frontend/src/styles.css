@@ -92,6 +92,7 @@ h2 {
   border-radius: 8px;
   min-height: 520px;
   overflow: hidden;
+  position: relative;
 }
 
 .video-placeholder {
@@ -105,6 +106,35 @@ h2 {
   min-height: 520px;
 }
 
+.video-placeholder span {
+  align-items: center;
+  color: #aebbc4;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.video-frame {
+  display: block;
+  height: 100%;
+  min-height: 520px;
+  object-fit: contain;
+  width: 100%;
+}
+
+.video-badge {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #ccd6dd;
+  border-radius: 8px;
+  display: inline-flex;
+  gap: 8px;
+  left: 14px;
+  min-height: 34px;
+  padding: 7px 10px;
+  position: absolute;
+  top: 14px;
+}
+
 .side-panel {
   display: grid;
   gap: 14px;
@@ -115,6 +145,15 @@ h2 {
   border: 1px solid #ccd6dd;
   border-radius: 8px;
   padding: 16px;
+}
+
+.panel-warning {
+  background: #fff4ce;
+  border: 1px solid #f1c75b;
+  border-radius: 8px;
+  color: #6f4f00;
+  margin-bottom: 12px;
+  padding: 8px 10px;
 }
 
 dl {
@@ -157,7 +196,8 @@ dd {
   }
 
   .video-surface,
-  .video-placeholder {
+  .video-placeholder,
+  .video-frame {
     min-height: 360px;
   }
 }

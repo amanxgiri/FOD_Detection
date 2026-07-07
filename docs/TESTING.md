@@ -16,3 +16,6 @@ without requiring a TensorRT engine.
 
 Milestone 5 streaming checks use `frame_limit=1` to validate the MJPEG response
 without leaving an infinite test stream open.
+
+Milestone 6 dashboard validation includes backend `/api/v1/system/status`,
+frontend type checking, and frontend production build.
