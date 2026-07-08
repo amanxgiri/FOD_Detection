@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cu126
+
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
 pydantic==2.11.7
@@ -5,5 +7,30 @@ pydantic-settings==2.10.1
 pytest==8.4.1
 httpx==0.28.1
 numpy==2.2.6
-opencv-python-headless==4.12.0.88
+opencv-python==4.12.0.88
 SQLAlchemy==2.0.41
+
+# CUDA 12.x / TensorRT export and runtime stack.
+# These packages allow a deployment machine with an NVIDIA CUDA-capable GPU to
+# convert backend/models/weights/model_weight.pt into model_weight.engine.
+torch==2.12.1+cu126
+torchvision==0.27.1+cu126
+ultralytics==8.4.90
+onnx==1.22.0
+onnxruntime-gpu==1.27.0
+onnxslim==0.1.94
+tensorrt-cu12==11.1.0.106
+nvidia-modelopt[onnx]==0.45.0
+onnx-graphsurgeon==0.6.1
+polygraphy==0.50.3
+onnxscript==0.7.1
+lief==0.17.6
+tqdm==4.68.4
+ninja==1.13.0
+omegaconf==2.3.1
+pulp==3.3.2
+regex==2026.6.28
+rich==15.0.0
+safetensors==0.8.0
+scipy==1.18.0
+setuptools==83.0.0

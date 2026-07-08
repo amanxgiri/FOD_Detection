@@ -638,6 +638,42 @@ The export script must:
 
 The TensorRT engine should be built on the intended deployment machine or in a deliberately compatible build environment.
 
+Dependency installation for a fresh deployment machine is:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+```
+
+The backend requirements file includes the CUDA 12.x export and runtime stack:
+
+```text
+PyTorch CUDA 12.6 wheels
+Ultralytics
+ONNX / ONNX Runtime GPU / ONNX Slim
+NVIDIA TensorRT CUDA 12 Python runtime
+NVIDIA ModelOpt ONNX helpers
+```
+
+The default dependency set assumes an NVIDIA GPU and driver compatible with CUDA
+12.x. If the deployment machine uses a different CUDA major version, the PyTorch
+and TensorRT wheel lines in `backend/requirements.txt` must be adjusted before
+installation. The prototype must still fail clearly rather than silently falling
+back to CPU inference.
+
+The expected deployment workflow is:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_model.py
+.\.venv\Scripts\python.exe scripts\export_tensorrt.py
+.\.venv\Scripts\python.exe scripts\check_model.py --require-engine --load-engine
+```
+
+The user-supplied `model_weight.pt` is committed or uploaded as the portable
+source artifact. The generated `model_weight.engine` is hardware/runtime-specific
+and must be regenerated on the target deployment machine when the GPU, driver,
+CUDA, TensorRT, input size, or model version changes. Generated `.engine` and
+intermediate `.onnx` files are ignored by git.
+
 After export, the generated engine must be validated before integration into the live inference pipeline.
 
 Validation must include:
@@ -711,8 +747,11 @@ pydantic-settings
 OpenCV
 NumPy
 PyTorch or current model runtime
+Ultralytics export/runtime tooling
+ONNX export tooling
 NVIDIA CUDA
 NVIDIA TensorRT
+NVIDIA ModelOpt
 SQLAlchemy
 SQLite
 pytest
