@@ -1,3 +1,4 @@
+import builtins
 from pathlib import Path
 
 import numpy as np
@@ -18,10 +19,21 @@ def test_tensorrt_adapter_requires_engine_file(tmp_path: Path) -> None:
         adapter.load()
 
 
-def test_tensorrt_adapter_reports_missing_runtime(tmp_path: Path) -> None:
+def test_tensorrt_adapter_reports_missing_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     engine = tmp_path / "model_weight.engine"
     engine.write_bytes(b"engine")
     adapter = TensorRTModelAdapter(engine)
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "tensorrt":
+            raise ImportError("synthetic missing TensorRT")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
 
     with pytest.raises(ModelRuntimeUnavailableError, match="TensorRT"):
         adapter.load()
