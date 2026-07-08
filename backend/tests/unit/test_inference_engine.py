@@ -39,6 +39,10 @@ class FakeModelAdapter:
         pass
 
 
+class CountingModelAdapter(FakeModelAdapter):
+    pass
+
+
 def make_packet(sequence_id: int) -> FramePacket:
     return FramePacket(
         sequence_id=sequence_id,
@@ -118,6 +122,31 @@ def test_inference_engine_records_error_and_continues() -> None:
     assert engine.get_latest_result() is not None
     assert monitor.snapshot().frames_inferred == 1
     assert adapter.calls == 2
+
+
+def test_inference_engine_rejects_invalid_frame_before_model_call() -> None:
+    buffer = LatestFrameBuffer()
+    adapter = CountingModelAdapter()
+    engine = InferenceEngine(
+        frame_buffer=buffer,
+        model_adapter=adapter,
+        postprocessor=PostProcessor(),
+        performance_monitor=PerformanceMonitor(),
+        poll_timeout_seconds=0.01,
+    )
+    invalid_packet = FramePacket(
+        sequence_id=1,
+        captured_at=datetime.now(UTC),
+        frame=np.zeros((0, 0, 3), dtype=np.uint8),
+    )
+
+    engine.start()
+    buffer.publish(invalid_packet)
+    wait_for(lambda: engine.get_last_error() is not None)
+    engine.stop()
+
+    assert adapter.calls == 0
+    assert "invalid frame" in (engine.get_last_error() or "")
 
 
 def test_inference_engine_publishes_annotated_frame() -> None:

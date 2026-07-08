@@ -24,6 +24,18 @@ class FakeCapture:
         self.released = True
 
 
+class SequenceCaptureFactory:
+    def __init__(self, captures: list[FakeCapture]) -> None:
+        self.captures = captures
+        self.calls = 0
+
+    def __call__(self, source):
+        self.calls += 1
+        if self.captures:
+            return self.captures.pop(0)
+        return FakeCapture([])
+
+
 def test_capture_one_publishes_timestamped_sequence() -> None:
     frame = np.ones((8, 8, 3), dtype=np.uint8)
     capture = FakeCapture([frame])
@@ -80,3 +92,31 @@ def test_failed_reads_are_counted() -> None:
     manager.stop()
 
     assert manager.get_read_failures() >= 1
+
+
+def test_camera_status_transitions_cover_disconnect_and_reconnect() -> None:
+    first = FakeCapture([np.ones((8, 8, 3), dtype=np.uint8)])
+    second = FakeCapture([np.ones((8, 8, 3), dtype=np.uint8)])
+    factory = SequenceCaptureFactory([first, second])
+    statuses: list[CameraStatus] = []
+    buffer = LatestFrameBuffer()
+    manager = CameraManager(
+        "0",
+        buffer,
+        reconnect_delay_seconds=0.01,
+        capture_factory=factory,
+        status_callback=statuses.append,
+    )
+
+    manager.start()
+    first_packet = buffer.wait_for_newer(0, timeout=1.0)
+    second_packet = buffer.wait_for_newer(1, timeout=1.0)
+    manager.stop()
+
+    assert first_packet is not None
+    assert second_packet is not None
+    assert factory.calls >= 2
+    assert CameraStatus.DEGRADED in statuses
+    assert CameraStatus.OFFLINE in statuses
+    assert CameraStatus.ONLINE in statuses
+    assert statuses[-1] == CameraStatus.STOPPED

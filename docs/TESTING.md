@@ -33,3 +33,6 @@ broadcast delivery, frontend type checking, and the smoke-test connection path.
 Milestone 10 acknowledgement validation checks REST status updates,
 deterministic repeated acknowledgement, `fod.acknowledged` event schema, and
 frontend acknowledgement state.
+
+Milestone 11 recovery tests cover camera disconnect/reconnect transitions,
+invalid-frame handling, system status derivation, and warning-event delivery.

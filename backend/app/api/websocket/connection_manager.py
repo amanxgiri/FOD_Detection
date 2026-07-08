@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import WebSocket
 
-from app.api.websocket.events import EventEnvelope
+from app.api.websocket.events import EventEnvelope, SystemWarningData, make_event
 
 
 class WebSocketConnectionManager:
@@ -30,3 +30,6 @@ class WebSocketConnectionManager:
                 disconnected.append(websocket)
         for websocket in disconnected:
             self.disconnect(websocket)
+
+    async def broadcast_warning(self, message: str) -> None:
+        await self.broadcast(make_event("system.warning", SystemWarningData(message=message)))

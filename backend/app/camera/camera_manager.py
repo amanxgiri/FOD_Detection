@@ -29,6 +29,7 @@ class CaptureDevice(Protocol):
 
 
 CaptureFactory = Callable[[int | str], CaptureDevice]
+StatusCallback = Callable[[CameraStatus], None]
 
 
 class CameraManager:
@@ -39,14 +40,16 @@ class CameraManager:
         reconnect_delay_seconds: float = 2.0,
         capture_factory: CaptureFactory | None = None,
         performance_monitor: PerformanceMonitor | None = None,
+        status_callback: StatusCallback | None = None,
     ) -> None:
         self._source = self._normalize_source(source)
         self._frame_buffer = frame_buffer
         self._reconnect_delay_seconds = reconnect_delay_seconds
         self._capture_factory = capture_factory or cv2.VideoCapture
         self._performance_monitor = performance_monitor
+        self._status_callback = status_callback
 
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._capture: CaptureDevice | None = None
@@ -59,7 +62,7 @@ class CameraManager:
             if self._thread is not None and self._thread.is_alive():
                 return
             self._stop_event.clear()
-            self._status = CameraStatus.OPENING
+            self._set_status(CameraStatus.OPENING)
             self._thread = threading.Thread(
                 target=self._capture_loop,
                 name="camera-capture",
@@ -75,7 +78,7 @@ class CameraManager:
         self._release_capture()
         with self._lock:
             self._thread = None
-            self._status = CameraStatus.STOPPED
+            self._set_status(CameraStatus.STOPPED)
 
     def is_running(self) -> bool:
         thread = self._thread
@@ -104,7 +107,7 @@ class CameraManager:
             capture = self._open_capture()
             with self._lock:
                 self._capture = capture
-                self._status = CameraStatus.ONLINE
+            self._set_status(CameraStatus.ONLINE)
 
             while not self._stop_event.is_set():
                 ok, frame = capture.read()
@@ -115,6 +118,8 @@ class CameraManager:
 
             self._release_capture()
             if not self._stop_event.is_set():
+                self._set_status(CameraStatus.OFFLINE)
+                logger.info("camera reconnect attempt")
                 time.sleep(self._reconnect_delay_seconds)
 
     def _open_capture(self, open_timeout_seconds: float | None = None) -> CaptureDevice:
@@ -131,8 +136,7 @@ class CameraManager:
                 return capture
 
             capture.release()
-            with self._lock:
-                self._status = CameraStatus.OFFLINE
+            self._set_status(CameraStatus.OFFLINE)
             logger.warning("camera open failed; retrying")
             if deadline is not None and time.monotonic() >= deadline:
                 raise TimeoutError(f"camera source {self._source!r} did not open")
@@ -144,7 +148,7 @@ class CameraManager:
         with self._lock:
             self._sequence_id += 1
             sequence_id = self._sequence_id
-            self._status = CameraStatus.ONLINE
+        self._set_status(CameraStatus.ONLINE)
         packet = FramePacket(
             sequence_id=sequence_id,
             captured_at=datetime.now(UTC),
@@ -158,10 +162,10 @@ class CameraManager:
     def _record_read_failure(self) -> None:
         with self._lock:
             self._read_failures += 1
-            self._status = CameraStatus.DEGRADED
+        self._set_status(CameraStatus.DEGRADED)
         if self._performance_monitor is not None:
             self._performance_monitor.record_camera_read_failure()
-        logger.warning("camera read failed")
+        logger.warning("camera disconnected")
 
     def _release_capture(self) -> None:
         with self._lock:
@@ -169,6 +173,15 @@ class CameraManager:
             self._capture = None
         if capture is not None:
             capture.release()
+
+    def _set_status(self, status: CameraStatus) -> None:
+        should_notify = False
+        with self._lock:
+            if self._status != status:
+                self._status = status
+                should_notify = True
+        if should_notify and self._status_callback is not None:
+            self._status_callback(status)
 
     @staticmethod
     def _normalize_source(source: int | str) -> int | str:

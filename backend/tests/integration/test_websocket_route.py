@@ -27,3 +27,18 @@ def test_websocket_disconnect_cleans_connection() -> None:
         assert app.state.websocket_manager.connection_count == 1
 
     assert app.state.websocket_manager.connection_count == 0
+
+
+def test_websocket_receives_system_warning_helper_event() -> None:
+    app = create_app()
+    client = TestClient(app)
+
+    with client.websocket_connect("/api/v1/ws/events") as websocket:
+        websocket.portal.call(
+            app.state.websocket_manager.broadcast_warning,
+            "runtime warning",
+        )
+        payload = websocket.receive_json()
+
+    assert payload["type"] == "system.warning"
+    assert payload["data"] == {"message": "runtime warning"}

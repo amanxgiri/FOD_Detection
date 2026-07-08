@@ -17,3 +17,7 @@ only reads `LatestAnnotatedFrameStore`; it does not run inference from the route
 Milestone 8 adds temporal validation. The inference worker keeps post-processed
 detections for rendering and exposes newly confirmed detections separately for
 later alert generation.
+
+Milestone 11 enriches runtime monitoring: camera status transitions can publish
+state changes, inference rejects invalid frames before model execution, and
+system status derives from live runtime managers when present.

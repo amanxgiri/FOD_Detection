@@ -83,6 +83,11 @@ class InferenceEngine:
         with self._lock:
             return self._last_error
 
+    def get_status(self) -> str:
+        if self.is_running():
+            return "error" if self.get_last_error() else "running"
+        return "stopped"
+
     def _inference_loop(self) -> None:
         while not self._stop_event.is_set():
             packet = self._frame_buffer.wait_for_newer(
@@ -97,6 +102,8 @@ class InferenceEngine:
         skipped_frames = max(0, packet.sequence_id - self._last_sequence_id - 1)
         self._last_sequence_id = packet.sequence_id
         try:
+            if packet.frame.size == 0 or packet.frame.ndim < 2:
+                raise ValueError("invalid frame cannot be processed")
             frame_height, frame_width = packet.frame.shape[:2]
             started = time.perf_counter()
             raw_detections = self._model_adapter.predict(packet.frame)

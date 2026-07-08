@@ -3,6 +3,11 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Request
 
 from app.monitoring.performance_monitor import PerformanceMonitor
+from app.monitoring.system_monitor import (
+    camera_status_from_manager,
+    inference_status_from_engine,
+    websocket_status_from_connection_count,
+)
 from app.schemas.system import SystemStatusResponse
 
 router = APIRouter(prefix="/system")
@@ -19,11 +24,17 @@ def get_system_status(request: Request) -> SystemStatusResponse:
         )
 
     return SystemStatusResponse(
-        camera_status=getattr(request.app.state, "camera_status", "not_started"),
+        camera_status=camera_status_from_manager(
+            getattr(request.app.state, "camera_manager", None)
+        ),
         model_status=getattr(request.app.state, "model_status", "not_started"),
-        inference_status=getattr(request.app.state, "inference_status", "not_started"),
+        inference_status=inference_status_from_engine(
+            getattr(request.app.state, "inference_engine", None)
+        ),
         backend_status="online",
-        websocket_status="not_started",
+        websocket_status=websocket_status_from_connection_count(
+            getattr(getattr(request.app.state, "websocket_manager", None), "connection_count", 0)
+        ),
         capture_fps=round(snapshot.capture_fps, 2),
         inference_fps=round(snapshot.inference_fps, 2),
         average_inference_ms=round(snapshot.average_inference_ms, 2),
