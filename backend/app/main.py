@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.core.lifecycle import start_live_runtime, stop_live_runtime
 from app.core.logging import configure_logging, get_logger
 from app.api.websocket.connection_manager import WebSocketConnectionManager
 from app.inference.annotated_frame_store import LatestAnnotatedFrameStore
@@ -39,8 +40,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.evidence_store = EvidenceStore(settings.evidence_directory)
     if not hasattr(app.state, "websocket_manager"):
         app.state.websocket_manager = WebSocketConnectionManager()
-    yield
-    logger.info("application shutdown")
+    start_live_runtime(app)
+    try:
+        yield
+    finally:
+        stop_live_runtime(app)
+        logger.info("application shutdown")
 
 
 def create_app() -> FastAPI:
@@ -52,9 +57,16 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    frontend_origins = list(
+        {
+            settings.frontend_origin,
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        }
+    )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.frontend_origin],
+        allow_origins=frontend_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

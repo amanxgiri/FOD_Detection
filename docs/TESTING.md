@@ -36,3 +36,7 @@ frontend acknowledgement state.
 
 Milestone 11 recovery tests cover camera disconnect/reconnect transitions,
 invalid-frame handling, system status derivation, and warning-event delivery.
+
+Live prototype validation includes a lifespan test that starts a fake camera,
+publishes frames to the MJPEG stream, and verifies clean shutdown. CORS coverage
+also includes the Vite loopback origin `http://127.0.0.1:5173`.

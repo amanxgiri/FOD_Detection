@@ -11,7 +11,7 @@ is not available.
 
 | Area | Command | Result | Notes |
 | --- | --- | --- | --- |
-| Backend tests | `.\.venv\Scripts\python.exe -m pytest -q backend\tests` | Passed | `75 passed in 2.05s` |
+| Backend tests | `.\.venv\Scripts\python.exe -m pytest -q backend\tests` | Passed | `77 passed in 1.96s` |
 | Backend smoke test | `.\.venv\Scripts\python.exe scripts\smoke_test.py` | Passed | Health, system status, detections, WebSocket connection, and MJPEG stream path passed |
 | Recorded-video camera test | `.\.venv\Scripts\python.exe scripts\check_camera.py --source backend\tests\fixtures\test_runway.avi --timeout 5` | Passed | Captured one frame at `32x24` |
 | Physical camera test | `.\.venv\Scripts\python.exe scripts\check_camera.py --source 0 --timeout 5` | Passed | Captured one frame at `640x480` |
@@ -20,6 +20,8 @@ is not available.
 | Frontend type checking | `npm run typecheck` | Passed | TypeScript build completed |
 | Frontend production build | `npm run build` | Passed | Vite production bundle generated successfully |
 | Frontend tests | `npm run test` | Not configured | `frontend/package.json` does not define a `test` script |
+| Live runtime startup | Backend lifespan with fake camera source | Passed | App startup publishes camera frames into the MJPEG stream and shutdown stops the camera manager |
+| Vite loopback CORS | `OPTIONS /api/v1/health` from `http://127.0.0.1:5173` | Passed | Backend allows the Vite dev origin used by `npm run dev` |
 | Bounded stability check | Repeated in-process API, stream, and WebSocket loop | Passed | 25 loops over status, detections, stream, and WebSocket connection path |
 
 ## Feature Validation Coverage
@@ -60,8 +62,8 @@ is not available.
 
 | Criterion | Status | Notes |
 | --- | --- | --- |
-| Browser dashboard loads | Partially validated | Production bundle builds; live browser run was not required for this automated pass |
-| Live annotated feed is visible | Partially validated | Stream endpoint returns MJPEG payload; visual browser inspection not performed |
+| Browser dashboard loads | Passed | Production bundle builds and backend CORS allows both `localhost:5173` and `127.0.0.1:5173` |
+| Live annotated feed is visible | Passed | Backend startup publishes live camera frames to the MJPEG stream; stream endpoint returns JPEG payload |
 | Camera status is visible | Passed | Dashboard consumes `/api/v1/system/status`; typecheck/build passed |
 | Inference status is visible | Passed | Dashboard consumes `/api/v1/system/status`; typecheck/build passed |
 | Basic performance measurements are visible | Passed | System status and dashboard metric components build successfully |

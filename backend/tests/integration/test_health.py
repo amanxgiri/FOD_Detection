@@ -28,3 +28,18 @@ def test_config_endpoint_exposes_safe_runtime_settings() -> None:
     assert body["model_runtime"] == "tensorrt"
     assert body["model_device"] == "cuda:0"
     assert "database_url" not in body
+
+
+def test_cors_allows_vite_loopback_origin() -> None:
+    client = TestClient(create_app())
+
+    response = client.options(
+        "/api/v1/health",
+        headers={
+            "Origin": "http://127.0.0.1:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
