@@ -25,3 +25,10 @@ Milestone 7 endpoints:
 Milestone 9 endpoint:
 
 - `WS /api/v1/ws/events`
+
+Runtime control endpoints:
+
+- `POST /api/v1/runtime/camera/start`
+- `POST /api/v1/runtime/camera/stop`
+- `POST /api/v1/runtime/inference/start`
+- `POST /api/v1/runtime/inference/stop`

@@ -24,6 +24,22 @@ export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
   return response.json() as Promise<SystemStatusResponse>;
 }
 
+export function startCamera(): Promise<SystemStatusResponse> {
+  return postRuntimeCommand("/camera/start");
+}
+
+export function stopCamera(): Promise<SystemStatusResponse> {
+  return postRuntimeCommand("/camera/stop");
+}
+
+export function startInference(): Promise<SystemStatusResponse> {
+  return postRuntimeCommand("/inference/start");
+}
+
+export function stopInference(): Promise<SystemStatusResponse> {
+  return postRuntimeCommand("/inference/stop");
+}
+
 export async function acknowledgeDetection(detectionId: string): Promise<DetectionSummary> {
   const response = await fetch(`${API_BASE_URL}/detections/${detectionId}/acknowledge`, {
     method: "POST"
@@ -38,4 +54,26 @@ export async function acknowledgeDetection(detectionId: string): Promise<Detecti
     confidence: body.confidence,
     status: body.status
   } as DetectionSummary;
+}
+
+async function postRuntimeCommand(path: string): Promise<SystemStatusResponse> {
+  const response = await fetch(`${API_BASE_URL}/runtime${path}`, {
+    method: "POST"
+  });
+  if (!response.ok) {
+    throw new Error(await readErrorDetail(response));
+  }
+  return response.json() as Promise<SystemStatusResponse>;
+}
+
+async function readErrorDetail(response: Response): Promise<string> {
+  try {
+    const body = await response.json();
+    if (typeof body.detail === "string") {
+      return body.detail;
+    }
+  } catch {
+    // Fall through to a generic status-based message.
+  }
+  return `Runtime command failed: ${response.status}`;
 }

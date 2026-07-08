@@ -40,3 +40,7 @@ invalid-frame handling, system status derivation, and warning-event delivery.
 Live prototype validation includes a lifespan test that starts a fake camera,
 publishes frames to the MJPEG stream, and verifies clean shutdown. CORS coverage
 also includes the Vite loopback origin `http://127.0.0.1:5173`.
+
+Runtime control validation covers camera stop/start commands, inference
+start/stop with an injected fake model adapter, model-load failure reporting,
+and the guard that requires the camera to be running before inference starts.

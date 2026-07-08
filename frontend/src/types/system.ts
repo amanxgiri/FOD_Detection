@@ -16,4 +16,5 @@ export interface SystemStatusState {
   loading: boolean;
   error: string | null;
   lastUpdatedAt: Date | null;
+  refresh: () => Promise<void>;
 }

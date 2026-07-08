@@ -21,3 +21,7 @@ later alert generation.
 Milestone 11 enriches runtime monitoring: camera status transitions can publish
 state changes, inference rejects invalid frames before model execution, and
 system status derives from live runtime managers when present.
+
+Runtime controls keep inference off by default. The dashboard Start Inference
+command loads and warms the configured model adapter before starting the worker;
+Stop Inference stops the worker and unloads the adapter.

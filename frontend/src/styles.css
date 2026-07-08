@@ -79,6 +79,50 @@ h2 {
   padding: 8px 10px;
 }
 
+.topbar-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.runtime-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.runtime-control {
+  align-items: center;
+  background: #245d34;
+  border: 1px solid #245d34;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 10px;
+}
+
+.runtime-control:disabled {
+  background: #8ca595;
+  border-color: #8ca595;
+  cursor: not-allowed;
+}
+
+.runtime-command-error {
+  background: #fff4ce;
+  border: 1px solid #f1c75b;
+  border-radius: 8px;
+  color: #6f4f00;
+  margin: 0;
+  max-width: 520px;
+  padding: 8px 10px;
+}
+
 .dashboard-grid {
   display: grid;
   gap: 20px;
@@ -227,6 +271,15 @@ dd {
   }
 
   .status-strip {
+    justify-content: flex-start;
+  }
+
+  .topbar-actions {
+    justify-items: start;
+    width: 100%;
+  }
+
+  .runtime-controls {
     justify-content: flex-start;
   }
 
