@@ -647,12 +647,17 @@ Dependency installation for a fresh deployment machine is:
 The backend requirements file includes the CUDA 12.x export and runtime stack:
 
 ```text
+Python 3.12 through Python 3.14 compatible backend pins
 PyTorch CUDA 12.6 wheels
 Ultralytics
 ONNX / ONNX Runtime GPU / ONNX Slim
 NVIDIA TensorRT CUDA 12 Python runtime
 NVIDIA ModelOpt plus explicitly pinned ONNX helper packages
 ```
+
+Pydantic is pinned to a version whose `pydantic-core` wheel supports Python
+3.14. Older Pydantic pins may try to build `pydantic-core` from source and fail
+because their PyO3 build dependency does not support Python 3.14.
 
 The default dependency set assumes an NVIDIA GPU and driver compatible with CUDA
 12.x. If the deployment machine uses a different CUDA major version, the PyTorch
