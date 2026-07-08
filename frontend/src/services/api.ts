@@ -1,7 +1,11 @@
 import type { SystemStatusResponse } from "../types/system";
 import type { DetectionSummary } from "../types/detection";
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+const backendOrigin =
+  import.meta.env.VITE_API_ORIGIN ??
+  `${window.location.protocol}//${window.location.hostname || "localhost"}:8000`;
+
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? `${backendOrigin}/api/v1`;
 export const STREAM_URL = `${API_BASE_URL}/stream`;
 
 export async function fetchHealth() {
