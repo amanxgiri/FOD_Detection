@@ -20,7 +20,7 @@ onnx==1.22.0
 onnxruntime-gpu==1.27.0
 onnxslim==0.1.94
 tensorrt-cu12==11.1.0.106
-nvidia-modelopt[onnx]==0.45.0
+nvidia-modelopt==0.45.0
 onnx-graphsurgeon==0.6.1
 polygraphy==0.50.3
 onnxscript==0.7.1
@@ -33,4 +33,4 @@ regex==2026.6.28
 rich==15.0.0
 safetensors==0.8.0
 scipy==1.18.0
-setuptools==83.0.0
+setuptools>=80,<82

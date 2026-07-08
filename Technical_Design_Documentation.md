@@ -651,7 +651,7 @@ PyTorch CUDA 12.6 wheels
 Ultralytics
 ONNX / ONNX Runtime GPU / ONNX Slim
 NVIDIA TensorRT CUDA 12 Python runtime
-NVIDIA ModelOpt ONNX helpers
+NVIDIA ModelOpt plus explicitly pinned ONNX helper packages
 ```
 
 The default dependency set assumes an NVIDIA GPU and driver compatible with CUDA
