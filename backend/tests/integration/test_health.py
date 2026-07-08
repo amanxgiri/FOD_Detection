@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import pytest
 
 from app.main import create_app
 
@@ -30,16 +31,23 @@ def test_config_endpoint_exposes_safe_runtime_settings() -> None:
     assert "database_url" not in body
 
 
-def test_cors_allows_vite_loopback_origin() -> None:
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ],
+)
+def test_cors_allows_vite_loopback_origin(origin: str) -> None:
     client = TestClient(create_app())
 
     response = client.options(
         "/api/v1/health",
         headers={
-            "Origin": "http://127.0.0.1:5173",
+            "Origin": origin,
             "Access-Control-Request-Method": "GET",
         },
     )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+    assert response.headers["access-control-allow-origin"] == origin
