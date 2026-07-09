@@ -638,10 +638,23 @@ The export script must:
 
 The TensorRT engine should be built on the intended deployment machine or in a deliberately compatible build environment.
 
+Backend command examples in this document assume commands are run from the
+repository root and that the backend virtual environment is located at:
+
+```text
+backend/.venv
+```
+
+If a root-level `.venv` is intentionally used instead, replace
+`.\backend\.venv\Scripts\python.exe` with `.\.venv\Scripts\python.exe` in the
+commands below. Do not mix virtual-environment paths. A shell error such as
+`./.venv/Scripts/python.exe: No such file or directory` means the selected
+virtual-environment path does not exist.
+
 Dependency installation for a fresh deployment machine is:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+.\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
 ```
 
 The backend requirements file includes the CUDA 12.x export and runtime stack:
@@ -668,9 +681,21 @@ back to CPU inference.
 The expected deployment workflow is:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\check_model.py
-.\.venv\Scripts\python.exe scripts\export_tensorrt.py
-.\.venv\Scripts\python.exe scripts\check_model.py --require-engine --load-engine
+.\backend\.venv\Scripts\python.exe scripts\check_model.py
+.\backend\.venv\Scripts\python.exe scripts\export_tensorrt.py
+.\backend\.venv\Scripts\python.exe scripts\check_model.py --require-engine --load-engine
+```
+
+The backend development server is started from the repository root with:
+
+```powershell
+.\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
+```
+
+The equivalent Git Bash path is:
+
+```bash
+./backend/.venv/Scripts/python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
 ```
 
 The user-supplied `model_weight.pt` is committed or uploaded as the portable
@@ -1242,6 +1267,41 @@ Example:
 ```env
 CAMERA_SOURCE=backend/tests/fixtures/test_runway.mp4
 ```
+
+---
+
+## 10.5 Windows Camera Read Diagnostics
+
+On Windows, OpenCV may successfully open a camera device and then fail while
+reading the first frame. This is a camera-source failure, not a FastAPI startup
+failure.
+
+Example diagnostic log pattern:
+
+```text
+CvCapture_MSMF::grabFrame videoio(MSMF): can't grab frame
+camera disconnected
+camera reconnect attempt
+```
+
+When this occurs, the required diagnostic path is:
+
+```powershell
+.\backend\.venv\Scripts\python.exe scripts\check_camera.py --source 0 --timeout 5
+```
+
+If the same source fails in the diagnostic script, investigate the camera source
+before treating the browser dashboard or API as broken:
+
+- close any other application using the camera;
+- verify Windows camera privacy permissions;
+- verify the configured `CAMERA_SOURCE`;
+- try another camera index such as `1`;
+- use a local video fixture to confirm the backend stream path still works.
+
+The application must treat this as a camera read failure, mark camera status as
+degraded or offline, and continue controlled reconnect attempts instead of
+terminating the API process.
 
 ---
 
@@ -2370,6 +2430,11 @@ publish camera.online
 ```
 
 Temporary camera failure must not terminate the entire API application.
+
+Windows OpenCV/MSMF read failures, including `OnReadSample` or `can't grab
+frame` logs after the camera reports opened, must follow this same path. They
+should be surfaced as camera degraded/offline status and diagnosed with
+`scripts/check_camera.py` against the exact configured source.
 
 ---
 
