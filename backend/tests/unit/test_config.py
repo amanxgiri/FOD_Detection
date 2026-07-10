@@ -10,4 +10,5 @@ def test_settings_defaults_match_prototype_contract() -> None:
     assert settings.model_engine_path == Path("backend/models/weights/model_weight.engine")
     assert settings.model_runtime == "tensorrt"
     assert settings.model_device == "cuda:0"
+    assert settings.model_confidence_threshold == 0.01
     assert settings.frontend_origin == "http://localhost:5173"

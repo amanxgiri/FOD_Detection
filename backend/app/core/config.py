@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     model_engine_path: Path = Path("backend/models/weights/model_weight.engine")
     model_runtime: str = "tensorrt"
     model_device: str = "cuda:0"
-    model_confidence_threshold: float = Field(default=0.25, ge=0.0, le=1.0)
+    model_confidence_threshold: float = Field(default=0.01, ge=0.0, le=1.0)
     model_iou_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
     model_image_size: int = Field(default=640, gt=0)
 
