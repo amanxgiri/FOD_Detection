@@ -642,19 +642,17 @@ Backend command examples in this document assume commands are run from the
 repository root and that the backend virtual environment is located at:
 
 ```text
-backend/.venv
+.venv
 ```
 
-If a root-level `.venv` is intentionally used instead, replace
-`.\backend\.venv\Scripts\python.exe` with `.\.venv\Scripts\python.exe` in the
-commands below. Do not mix virtual-environment paths. A shell error such as
+Do not mix virtual-environment paths. A shell error such as
 `./.venv/Scripts/python.exe: No such file or directory` means the selected
-virtual-environment path does not exist.
+virtual-environment path does not exist in the current checkout.
 
 Dependency installation for a fresh deployment machine is:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
 ```
 
 The backend requirements file includes the CUDA 12.x export and runtime stack:
@@ -681,21 +679,21 @@ back to CPU inference.
 The expected deployment workflow is:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe scripts\check_model.py
-.\backend\.venv\Scripts\python.exe scripts\export_tensorrt.py
-.\backend\.venv\Scripts\python.exe scripts\check_model.py --require-engine --load-engine
+.\.venv\Scripts\python.exe scripts\check_model.py
+.\.venv\Scripts\python.exe scripts\export_tensorrt.py
+.\.venv\Scripts\python.exe scripts\check_model.py --require-engine --load-engine
 ```
 
 The backend development server is started from the repository root with:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
 ```
 
 The equivalent Git Bash path is:
 
 ```bash
-./backend/.venv/Scripts/python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
+./.venv/Scripts/python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
 ```
 
 The user-supplied `model_weight.pt` is committed or uploaded as the portable
@@ -1287,7 +1285,7 @@ camera reconnect attempt
 When this occurs, the required diagnostic path is:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe scripts\check_camera.py --source 0 --timeout 5
+.\.venv\Scripts\python.exe scripts\check_camera.py --source 0 --timeout 5
 ```
 
 If the same source fails in the diagnostic script, investigate the camera source
