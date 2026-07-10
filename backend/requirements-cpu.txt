@@ -1,0 +1,17 @@
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+pydantic==2.13.4
+pydantic-settings==2.14.2
+pytest==8.4.1
+httpx==0.28.1
+numpy==2.2.6
+opencv-python==4.12.0.88
+SQLAlchemy==2.0.41
+
+# Portable inference stack for macOS, Linux, and machines without CUDA/TensorRT.
+torch==2.12.1
+torchvision==0.27.1
+ultralytics==8.4.90
+rich==15.0.0
+scipy==1.18.0
+setuptools>=80,<82

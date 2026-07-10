@@ -5,10 +5,12 @@ import numpy as np
 import pytest
 
 from app.inference.model_adapter import (
+    AutoFallbackModelAdapter,
     ModelArtifactNotFoundError,
     ModelNotLoadedError,
     ModelRuntimeUnavailableError,
     TensorRTModelAdapter,
+    UltralyticsPtModelAdapter,
 )
 
 
@@ -82,6 +84,59 @@ def test_tensorrt_adapter_normalizes_ultralytics_predictions(
     assert model.last_kwargs["imgsz"] == 32
 
 
+def test_pt_adapter_normalizes_ultralytics_predictions(tmp_path: Path) -> None:
+    source = tmp_path / "model_weight.pt"
+    source.write_bytes(b"weights")
+    model = FakeYoloModel()
+    adapter = UltralyticsPtModelAdapter(
+        source,
+        device="cpu",
+        image_size=48,
+        confidence_threshold=0.10,
+        iou_threshold=0.4,
+        model_factory=lambda path: model,
+    )
+
+    adapter.load()
+    detections = adapter.predict(np.zeros((16, 16, 3), dtype=np.uint8))
+
+    assert len(detections) == 1
+    assert detections[0].class_name == "washer"
+    assert model.last_kwargs["device"] == "cpu"
+    assert model.last_kwargs["imgsz"] == 48
+    assert model.last_kwargs["conf"] == pytest.approx(0.10)
+
+
+def test_auto_adapter_falls_back_when_primary_load_fails() -> None:
+    primary = FakeAdapter(fail_load=True)
+    fallback = FakeAdapter()
+    adapter = AutoFallbackModelAdapter(primary=primary, fallback=fallback)
+
+    adapter.load()
+    adapter.warmup()
+
+    assert adapter.active_adapter is fallback
+    assert adapter.fallback_reason == "primary unavailable"
+    assert primary.closed
+    assert fallback.loaded
+    assert fallback.warmed
+
+
+def test_auto_adapter_falls_back_when_primary_warmup_fails() -> None:
+    primary = FakeAdapter(fail_warmup=True)
+    fallback = FakeAdapter()
+    adapter = AutoFallbackModelAdapter(primary=primary, fallback=fallback)
+
+    adapter.load()
+    adapter.warmup()
+
+    assert adapter.active_adapter is fallback
+    assert adapter.fallback_reason == "primary warmup failed"
+    assert primary.closed
+    assert fallback.loaded
+    assert fallback.warmed
+
+
 class FakeYoloModel:
     names = {2: "washer"}
 
@@ -106,3 +161,32 @@ class FakeResult:
             },
         )()
     ]
+
+
+class FakeAdapter:
+    def __init__(
+        self,
+        fail_load: bool = False,
+        fail_warmup: bool = False,
+    ) -> None:
+        self.fail_load = fail_load
+        self.fail_warmup = fail_warmup
+        self.loaded = False
+        self.warmed = False
+        self.closed = False
+
+    def load(self) -> None:
+        if self.fail_load:
+            raise ModelRuntimeUnavailableError("primary unavailable")
+        self.loaded = True
+
+    def warmup(self) -> None:
+        if self.fail_warmup:
+            raise ModelRuntimeUnavailableError("primary warmup failed")
+        self.warmed = True
+
+    def predict(self, frame: np.ndarray) -> list:
+        return []
+
+    def close(self) -> None:
+        self.closed = True

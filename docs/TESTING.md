@@ -43,4 +43,5 @@ also includes the Vite loopback origin `http://127.0.0.1:5173`.
 
 Runtime control validation covers camera stop/start commands, inference
 start/stop with an injected fake model adapter, model-load failure reporting,
-and the guard that requires the camera to be running before inference starts.
+auto TensorRT-to-`.pt` fallback behavior, and the guard that requires the camera
+to be running before inference starts.

@@ -26,7 +26,7 @@ def test_config_endpoint_exposes_safe_runtime_settings() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["model_runtime"] == "tensorrt"
+    assert body["model_runtime"] == "auto"
     assert body["model_device"] == "cuda:0"
     assert "database_url" not in body
 

@@ -1,11 +1,13 @@
 # Inference Pipeline
 
-Inference is specified for a TensorRT runtime engine generated from
-`backend/models/weights/model_weight.pt`. The implementation starts in Milestone 3.
+Inference supports a TensorRT runtime engine generated from
+`backend/models/weights/model_weight.pt`, plus a portable `.pt` fallback for
+machines without CUDA/TensorRT. The implementation starts in Milestone 3.
 
 Milestone 3 adds the model adapter interface, normalized `RawDetection` type,
 TensorRT adapter prerequisite checks, and export/diagnostic scripts. Actual engine
-generation must be run on a CUDA/TensorRT-capable machine and must not fall back to CPU.
+generation must be run on a CUDA/TensorRT-capable machine and must not fall back
+to CPU during export. Runtime `auto` mode can fall back to the `.pt` adapter.
 
 Milestone 4 adds the decoupled inference worker. It waits on `LatestFrameBuffer`,
 processes only newer sequence IDs, counts skipped frames, applies deterministic
@@ -24,4 +26,6 @@ system status derives from live runtime managers when present.
 
 Runtime controls keep inference off by default. The dashboard Start Inference
 command loads and warms the configured model adapter before starting the worker;
-Stop Inference stops the worker and unloads the adapter.
+Stop Inference stops the worker and unloads the adapter. With
+`MODEL_RUNTIME=auto`, Start Inference attempts TensorRT first and uses the `.pt`
+fallback when TensorRT cannot run on the current device.

@@ -21,7 +21,7 @@ The model weights will be supplied to the project as:
 model_weight.pt
 ```
 
-The supplied `.pt` file is the source model artifact. The prototype deployment workflow must convert this model to a TensorRT engine and use the generated engine for runtime inference on the NVIDIA GPU.
+The supplied `.pt` file is the source model artifact. The prototype deployment workflow supports an optimized TensorRT engine on NVIDIA GPU hosts and a portable `.pt` fallback path for machines without CUDA/TensorRT support.
 
 The prototype must:
 
@@ -584,7 +584,7 @@ If the current saved weights require another runtime, the implementation must pr
 
 The rest of the system must receive normalized application-level detection objects and must not depend on raw detector-library result objects.
 
-### 4.3.1 Model Weight and TensorRT Deployment Path
+### 4.3.1 Model Weight, TensorRT Deployment Path, and Portable Fallback
 
 The user will provide the trained model weights as:
 
@@ -594,7 +594,7 @@ backend/models/weights/model_weight.pt
 
 This `.pt` model is the source model artifact.
 
-For the prototype runtime, the model must be exported to TensorRT engine format:
+For the optimized prototype runtime, the model should be exported to TensorRT engine format:
 
 ```text
 model_weight.pt
@@ -612,13 +612,13 @@ TensorRT runtime inference
 NVIDIA GPU
 ```
 
-The runtime inference pipeline must use:
+The optimized inference pipeline uses:
 
 ```text
 backend/models/weights/model_weight.engine
 ```
 
-The `.pt` source model must be retained so that the TensorRT engine can be regenerated when the target GPU, CUDA, TensorRT, model input configuration, or deployment environment changes.
+The `.pt` source model must be retained so that the TensorRT engine can be regenerated when the target GPU, CUDA, TensorRT, model input configuration, or deployment environment changes. It is also the portable fallback artifact for macOS, Linux, and machines without CUDA/TensorRT.
 
 The export process must be implemented as a separate script:
 
@@ -634,7 +634,7 @@ The export script must:
 - save the generated engine as `model_weight.engine`;
 - report the export configuration;
 - fail clearly when export cannot be completed;
-- not silently fall back to CPU inference.
+- not silently fall back to CPU during TensorRT export.
 
 The TensorRT engine should be built on the intended deployment machine or in a deliberately compatible build environment.
 
@@ -670,11 +670,13 @@ Pydantic is pinned to a version whose `pydantic-core` wheel supports Python
 3.14. Older Pydantic pins may try to build `pydantic-core` from source and fail
 because their PyO3 build dependency does not support Python 3.14.
 
-The default dependency set assumes an NVIDIA GPU and driver compatible with CUDA
+The CUDA dependency set assumes an NVIDIA GPU and driver compatible with CUDA
 12.x. If the deployment machine uses a different CUDA major version, the PyTorch
 and TensorRT wheel lines in `backend/requirements.txt` must be adjusted before
-installation. The prototype must still fail clearly rather than silently falling
-back to CPU inference.
+installation. Machines without CUDA/TensorRT should install
+`backend/requirements-cpu.txt`; the default `MODEL_RUNTIME=auto` will try the
+TensorRT engine first and then fall back to the `.pt` model on
+`MODEL_FALLBACK_DEVICE`.
 
 The expected deployment workflow is:
 
@@ -697,10 +699,12 @@ The equivalent Git Bash path is:
 ```
 
 The user-supplied `model_weight.pt` is committed or uploaded as the portable
-source artifact. The generated `model_weight.engine` is hardware/runtime-specific
-and must be regenerated on the target deployment machine when the GPU, driver,
-CUDA, TensorRT, input size, or model version changes. Generated `.engine` and
-intermediate `.onnx` files are ignored by git.
+source artifact. The committed `model_weight.engine` is a convenience artifact
+for compatible NVIDIA/CUDA/TensorRT machines. TensorRT engines remain
+hardware/runtime-specific and must be regenerated on the target deployment
+machine when the GPU, driver, CUDA, TensorRT, input size, or model version
+changes. Additional generated `.engine` files and intermediate `.onnx` files are
+ignored by git.
 
 After export, the generated engine must be validated before integration into the live inference pipeline.
 
@@ -717,9 +721,11 @@ Validation must include:
 [ ] inference latency is measured
 ```
 
-The runtime model adapter should load `model_weight.engine` for normal prototype inference.
-
-The source `model_weight.pt` should not be used as the default runtime model after the TensorRT engine has been successfully created and validated.
+The runtime model adapter should use `MODEL_RUNTIME=auto` by default. In auto
+mode, it loads `model_weight.engine` when TensorRT prerequisites are available
+and falls back to `model_weight.pt` when the engine path cannot run on the
+current machine. Strict deployments can set `MODEL_RUNTIME=tensorrt` to require
+the engine-only path.
 
 ---
 
@@ -791,9 +797,9 @@ PyTorch provides inference mode for workloads where operations do not require au
 
 SQLAlchemy will provide the backend persistence abstraction over the prototype SQLite database. SQLAlchemy describes itself as a Python SQL toolkit and object-relational mapper.
 
-The target inference hardware for this prototype is an NVIDIA CUDA-capable GPU. The supplied `model_weight.pt` model must be exported to a TensorRT `model_weight.engine` artifact, and the validated TensorRT engine must be used for the normal runtime inference path.
+The target optimized inference hardware for this prototype is an NVIDIA CUDA-capable GPU. The supplied `model_weight.pt` model can be exported to a TensorRT `model_weight.engine` artifact, and compatible NVIDIA deployments should use the validated TensorRT engine for the fastest runtime path.
 
-CPU inference is not the intended deployment path for this prototype and must not be used as an automatic silent fallback.
+For portability, the default runtime is `auto`: TensorRT is attempted first, and if CUDA, TensorRT, or the engine is unavailable, runtime inference falls back to the `.pt` model on the configured fallback device. Strict TensorRT deployments can disable fallback with `MODEL_RUNTIME=tensorrt`.
 
 ---
 
@@ -1133,16 +1139,16 @@ The required startup order is:
 1. Load configuration
 2. Configure logging
 3. Initialize database
-4. Validate TensorRT engine path
-5. Verify NVIDIA GPU and TensorRT runtime availability
-6. Load `model_weight.engine`
-7. Warm up model where supported
-8. Initialize camera
-9. Validate camera connection
-10. Start capture worker
-11. Start inference worker
-12. Initialize WebSocket manager
-13. Mark system ready
+4. Initialize camera runtime
+5. Initialize camera
+6. Validate camera connection where possible
+7. Start capture worker
+8. Initialize WebSocket manager
+9. Mark system ready with inference stopped
+10. On operator Start Inference command, load configured model runtime
+11. In `auto` mode, try TensorRT engine and fall back to `.pt` if needed
+12. Warm up model where supported
+13. Start inference worker after model warmup
 ```
 
 The health endpoint must not report the system as fully ready before all critical components have initialized.
@@ -2247,8 +2253,9 @@ CAMERA_RECONNECT_DELAY_SECONDS=2
 
 MODEL_SOURCE_PATH=backend/models/weights/model_weight.pt
 MODEL_ENGINE_PATH=backend/models/weights/model_weight.engine
-MODEL_RUNTIME=tensorrt
+MODEL_RUNTIME=auto
 MODEL_DEVICE=cuda:0
+MODEL_FALLBACK_DEVICE=cpu
 MODEL_CONFIDENCE_THRESHOLD=0.01
 MODEL_IOU_THRESHOLD=0.50
 MODEL_IMAGE_SIZE=640
@@ -2527,9 +2534,10 @@ Required smoke checks:
 [ ] database initializes
 [ ] `model_weight.pt` source model is accessible
 [ ] TensorRT export script can validate export prerequisites
-[ ] `model_weight.engine` is accessible
-[ ] TensorRT engine loads
-[ ] inference executes on the configured NVIDIA GPU
+[ ] `model_weight.engine` is accessible on TensorRT deployments
+[ ] TensorRT engine loads on compatible NVIDIA deployments
+[ ] auto runtime falls back to `.pt` when TensorRT is unavailable
+[ ] inference executes on the configured runtime
 [ ] camera source opens
 [ ] frame can be captured
 [ ] inference can run on one frame
@@ -2751,8 +2759,9 @@ TensorRT export script
 `model_weight.pt` source-model handling
 `model_weight.engine` generation
 TensorRT runtime adapter
+Ultralytics `.pt` fallback adapter
 NVIDIA GPU inference configuration
-one-frame TensorRT inference
+one-frame runtime inference
 normalized detections
 model diagnostic script
 ```
@@ -2764,7 +2773,8 @@ Validation:
 TensorRT export completes successfully
 `model_weight.engine` is created
 TensorRT engine loads successfully
-inference runs on the configured NVIDIA GPU
+inference runs on the configured NVIDIA GPU where available
+auto runtime falls back to `.pt` on non-CUDA hosts
 engine processes known frame
 detections normalize correctly
 empty detections are handled
@@ -3035,9 +3045,10 @@ The prototype is accepted when all of the following are true.
 [ ] one camera can be opened
 [ ] frames are continuously captured
 [ ] supplied `model_weight.pt` is available
-[ ] `model_weight.pt` can be exported to `model_weight.engine`
-[ ] TensorRT engine loads successfully
-[ ] real-time inference runs on the NVIDIA GPU
+[ ] `model_weight.pt` can be exported to `model_weight.engine` on CUDA/TensorRT hosts
+[ ] TensorRT engine loads successfully on compatible NVIDIA deployments
+[ ] auto runtime can fall back to `.pt` on machines without CUDA/TensorRT
+[ ] real-time inference runs on the configured runtime
 [ ] detections are normalized
 [ ] annotated frames are generated
 ```
@@ -3168,7 +3179,7 @@ Update documentation when an API contract, configuration parameter, data model, 
 
 ### Rule 16
 
-Treat `model_weight.pt` as the supplied source model artifact. Export and validate `model_weight.engine`, then use the TensorRT engine as the normal runtime inference model on the configured NVIDIA GPU. Do not silently fall back to CPU inference.
+Treat `model_weight.pt` as the supplied source model artifact. Export and validate `model_weight.engine` for optimized NVIDIA GPU deployments. Default runtime mode is `auto`, which attempts TensorRT first and falls back to the `.pt` model on `MODEL_FALLBACK_DEVICE` when CUDA/TensorRT is unavailable. Strict TensorRT deployments must set `MODEL_RUNTIME=tensorrt` and fail clearly if the engine cannot run.
 
 ---
 

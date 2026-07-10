@@ -4,9 +4,11 @@ import pytest
 
 from app.core.config import Settings
 from app.inference.model_adapter import (
+    AutoFallbackModelAdapter,
     ModelArtifactNotFoundError,
     ModelIntegrationError,
     TensorRTModelAdapter,
+    UltralyticsPtModelAdapter,
 )
 from app.inference.model_loader import (
     create_model_adapter,
@@ -42,16 +44,41 @@ def test_validate_engine_model_accepts_engine_file(tmp_path: Path) -> None:
     validate_engine_model(engine)
 
 
-def test_create_model_adapter_uses_tensorrt_runtime() -> None:
+def test_create_model_adapter_uses_auto_runtime_by_default() -> None:
     settings = Settings()
+
+    adapter = create_model_adapter(settings)
+
+    assert isinstance(adapter, AutoFallbackModelAdapter)
+
+
+def test_create_model_adapter_uses_tensorrt_runtime() -> None:
+    settings = Settings(model_runtime="tensorrt")
 
     adapter = create_model_adapter(settings)
 
     assert isinstance(adapter, TensorRTModelAdapter)
 
 
-def test_create_model_adapter_rejects_unknown_runtime() -> None:
+def test_create_model_adapter_uses_pt_runtime() -> None:
+    settings = Settings(model_runtime="pt")
+
+    adapter = create_model_adapter(settings)
+
+    assert isinstance(adapter, UltralyticsPtModelAdapter)
+
+
+def test_create_model_adapter_uses_cpu_runtime() -> None:
     settings = Settings(model_runtime="cpu")
+
+    adapter = create_model_adapter(settings)
+
+    assert isinstance(adapter, UltralyticsPtModelAdapter)
+    assert adapter.device == "cpu"
+
+
+def test_create_model_adapter_rejects_unknown_runtime() -> None:
+    settings = Settings(model_runtime="unknown")
 
     with pytest.raises(ModelIntegrationError, match="unsupported"):
         create_model_adapter(settings)
