@@ -12,6 +12,7 @@ backend/data/*.db
 backend/data/detections/*
 !backend/data/detections/.gitkeep
 backend/models/weights/*.engine
+!backend/models/weights/model_weight.engine
 backend/models/weights/*.onnx
 
 .env
