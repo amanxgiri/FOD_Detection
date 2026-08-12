@@ -36,6 +36,7 @@ def create_model_adapter(settings: Settings) -> ModelAdapter:
         image_size=settings.model_image_size,
         confidence_threshold=settings.model_confidence_threshold,
         iou_threshold=settings.model_iou_threshold,
+        class_ids=(settings.model_fod_class_id,),
     )
     pt_adapter = UltralyticsPtModelAdapter(
         source_path=settings.model_source_path,
@@ -43,6 +44,7 @@ def create_model_adapter(settings: Settings) -> ModelAdapter:
         image_size=settings.model_image_size,
         confidence_threshold=settings.model_confidence_threshold,
         iou_threshold=settings.model_iou_threshold,
+        class_ids=(settings.model_fod_class_id,),
     )
 
     if runtime == "auto":
@@ -58,5 +60,6 @@ def create_model_adapter(settings: Settings) -> ModelAdapter:
             image_size=settings.model_image_size,
             confidence_threshold=settings.model_confidence_threshold,
             iou_threshold=settings.model_iou_threshold,
+            class_ids=(settings.model_fod_class_id,),
         )
     raise ModelIntegrationError(f"unsupported model runtime: {settings.model_runtime}")

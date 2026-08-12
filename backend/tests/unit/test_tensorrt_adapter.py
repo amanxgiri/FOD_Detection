@@ -61,6 +61,7 @@ def test_tensorrt_adapter_normalizes_ultralytics_predictions(
         image_size=32,
         confidence_threshold=0.25,
         iou_threshold=0.5,
+        class_ids=(2,),
         model_factory=lambda path: model,
     )
     monkeypatch.setattr(
@@ -82,6 +83,7 @@ def test_tensorrt_adapter_normalizes_ultralytics_predictions(
     assert detections[0].y2 == pytest.approx(10.0)
     assert model.last_kwargs["device"] == "cuda:0"
     assert model.last_kwargs["imgsz"] == 32
+    assert model.last_kwargs["classes"] == [2]
 
 
 def test_pt_adapter_normalizes_ultralytics_predictions(tmp_path: Path) -> None:
@@ -94,6 +96,7 @@ def test_pt_adapter_normalizes_ultralytics_predictions(tmp_path: Path) -> None:
         image_size=48,
         confidence_threshold=0.10,
         iou_threshold=0.4,
+        class_ids=(2,),
         model_factory=lambda path: model,
     )
 
@@ -105,6 +108,23 @@ def test_pt_adapter_normalizes_ultralytics_predictions(tmp_path: Path) -> None:
     assert model.last_kwargs["device"] == "cpu"
     assert model.last_kwargs["imgsz"] == 48
     assert model.last_kwargs["conf"] == pytest.approx(0.10)
+    assert model.last_kwargs["classes"] == [2]
+
+
+def test_pt_adapter_filters_out_non_selected_classes(tmp_path: Path) -> None:
+    source = tmp_path / "model_weight.pt"
+    source.write_bytes(b"weights")
+    model = FakeYoloModel()
+    adapter = UltralyticsPtModelAdapter(
+        source,
+        class_ids=(0,),
+        model_factory=lambda path: model,
+    )
+
+    adapter.load()
+    detections = adapter.predict(np.zeros((16, 16, 3), dtype=np.uint8))
+
+    assert detections == []
 
 
 def test_auto_adapter_falls_back_when_primary_load_fails() -> None:

@@ -27,12 +27,15 @@ MODEL_RUNTIME=auto
 MODEL_DEVICE=cuda:0
 MODEL_FALLBACK_DEVICE=cpu
 MODEL_CONFIDENCE_THRESHOLD=0.01
+MODEL_FOD_CLASS_ID=0
 ```
 
 - `MODEL_RUNTIME=auto` tries TensorRT and automatically falls back to `.pt`.
 - `MODEL_RUNTIME=tensorrt` requires the `.engine` and CUDA/TensorRT runtime.
 - `MODEL_RUNTIME=pt` uses the `.pt` model on `MODEL_FALLBACK_DEVICE`.
 - `MODEL_RUNTIME=cpu` forces the `.pt` model on CPU.
+- `MODEL_FOD_CLASS_ID=0` restricts inference and display to the model's `FOD`
+  class. Other model classes are ignored.
 
 On Apple Silicon, you can try `MODEL_RUNTIME=pt` and
 `MODEL_FALLBACK_DEVICE=mps`; keep `cpu` if your local PyTorch build does not

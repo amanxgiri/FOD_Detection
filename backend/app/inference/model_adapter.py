@@ -60,6 +60,7 @@ class _UltralyticsDetectionMixin:
         image_size: int,
         confidence_threshold: float,
         iou_threshold: float,
+        class_ids: tuple[int, ...],
     ) -> list[RawDetection]:
         if self._model is None:
             raise ModelRuntimeUnavailableError("model runtime is not initialized")
@@ -70,11 +71,16 @@ class _UltralyticsDetectionMixin:
             imgsz=image_size,
             conf=confidence_threshold,
             iou=iou_threshold,
+            classes=list(class_ids),
             verbose=False,
         )
-        return self._normalize_results(results)
+        return self._normalize_results(results, allowed_class_ids=set(class_ids))
 
-    def _normalize_results(self, results: Any) -> list[RawDetection]:
+    def _normalize_results(
+        self,
+        results: Any,
+        allowed_class_ids: set[int] | None = None,
+    ) -> list[RawDetection]:
         detections: list[RawDetection] = []
         for result in results:
             names = getattr(result, "names", None) or getattr(self._model, "names", {})
@@ -84,6 +90,8 @@ class _UltralyticsDetectionMixin:
 
             for box in boxes:
                 class_id = int(self._scalar_value(getattr(box, "cls", 0)))
+                if allowed_class_ids is not None and class_id not in allowed_class_ids:
+                    continue
                 confidence = float(self._scalar_value(getattr(box, "conf", 0.0)))
                 xyxy = self._array_values(getattr(box, "xyxy", []))
                 if xyxy.size < 4:
@@ -137,6 +145,7 @@ class TensorRTModelAdapter(_UltralyticsDetectionMixin):
         image_size: int = 640,
         confidence_threshold: float = 0.25,
         iou_threshold: float = 0.50,
+        class_ids: tuple[int, ...] = (0,),
         model_factory: Callable[[str], Any] | None = None,
     ) -> None:
         self.engine_path = resolve_project_path(engine_path)
@@ -144,6 +153,7 @@ class TensorRTModelAdapter(_UltralyticsDetectionMixin):
         self.image_size = image_size
         self.confidence_threshold = confidence_threshold
         self.iou_threshold = iou_threshold
+        self.class_ids = class_ids
         self._model_factory = model_factory
         self._model: Any | None = None
         self._loaded = False
@@ -181,6 +191,7 @@ class TensorRTModelAdapter(_UltralyticsDetectionMixin):
             image_size=self.image_size,
             confidence_threshold=self.confidence_threshold,
             iou_threshold=self.iou_threshold,
+            class_ids=self.class_ids,
         )
 
     def close(self) -> None:
@@ -217,6 +228,7 @@ class UltralyticsPtModelAdapter(_UltralyticsDetectionMixin):
         image_size: int = 640,
         confidence_threshold: float = 0.25,
         iou_threshold: float = 0.50,
+        class_ids: tuple[int, ...] = (0,),
         model_factory: Callable[[str], Any] | None = None,
     ) -> None:
         self.source_path = resolve_project_path(source_path)
@@ -224,6 +236,7 @@ class UltralyticsPtModelAdapter(_UltralyticsDetectionMixin):
         self.image_size = image_size
         self.confidence_threshold = confidence_threshold
         self.iou_threshold = iou_threshold
+        self.class_ids = class_ids
         self._model_factory = model_factory
         self._model: Any | None = None
         self._loaded = False
@@ -261,6 +274,7 @@ class UltralyticsPtModelAdapter(_UltralyticsDetectionMixin):
             image_size=self.image_size,
             confidence_threshold=self.confidence_threshold,
             iou_threshold=self.iou_threshold,
+            class_ids=self.class_ids,
         )
 
     def close(self) -> None:

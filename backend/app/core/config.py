@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     model_confidence_threshold: float = Field(default=0.01, ge=0.0, le=1.0)
     model_iou_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
     model_image_size: int = Field(default=640, gt=0)
+    model_fod_class_id: int = Field(default=0, ge=0)
 
     temporal_validation_enabled: bool = True
     temporal_window_size: int = Field(default=5, gt=0)
