@@ -26,7 +26,7 @@ def get_config() -> PublicConfigResponse:
         model_confidence_threshold=settings.model_confidence_threshold,
         model_iou_threshold=settings.model_iou_threshold,
         model_image_size=settings.model_image_size,
-        inference_slot_timeout_seconds=settings.inference_slot_timeout_seconds,
+        inference_idle_backoff_seconds=settings.inference_idle_backoff_seconds,
         temporal_validation_enabled=settings.temporal_validation_enabled,
         stream_jpeg_quality=settings.stream_jpeg_quality,
     )

@@ -249,7 +249,7 @@ class RuntimeController:
                 camera_id: TemporalValidator(validator_config)
                 for camera_id in CAMERA_IDS
             },
-            slot_timeout_seconds=self._settings.inference_slot_timeout_seconds,
+            idle_backoff_seconds=self._settings.inference_idle_backoff_seconds,
         )
 
     def _ensure_bridges_running(self) -> None:

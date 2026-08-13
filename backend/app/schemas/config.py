@@ -12,6 +12,6 @@ class PublicConfigResponse(BaseModel):
     model_confidence_threshold: float
     model_iou_threshold: float
     model_image_size: int
-    inference_slot_timeout_seconds: float
+    inference_idle_backoff_seconds: float
     temporal_validation_enabled: bool
     stream_jpeg_quality: int

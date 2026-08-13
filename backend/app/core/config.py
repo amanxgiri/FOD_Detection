@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     model_iou_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
     model_image_size: int = Field(default=640, gt=0)
     model_fod_class_id: int = Field(default=0, ge=0)
-    inference_slot_timeout_seconds: float = Field(default=0.20, gt=0.0)
+    inference_idle_backoff_seconds: float = Field(default=0.001, ge=0.0)
 
     @property
     def camera_sources(self) -> dict[str, str]:

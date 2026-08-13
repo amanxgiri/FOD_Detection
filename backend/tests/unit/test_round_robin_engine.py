@@ -59,7 +59,6 @@ def test_round_robin_engine_serializes_three_camera_models() -> None:
         postprocessor=PostProcessor(confidence_threshold=0.01),
         performance_monitor=PerformanceMonitor(),
         temporal_validators=validators,
-        slot_timeout_seconds=0.01,
     )
 
     for sequence_id in (1, 2):
@@ -88,6 +87,51 @@ def test_round_robin_engine_serializes_three_camera_models() -> None:
         "camera_3",
     ]
     assert all(stores[camera_id].get_latest() is not None for camera_id in camera_ids)
+
+
+def test_round_robin_skips_empty_turns_and_snapshots_only_latest_frame() -> None:
+    camera_ids = ("camera_1", "camera_2", "camera_3")
+    buffers = {camera_id: LatestFrameBuffer() for camera_id in camera_ids}
+    stores = {camera_id: LatestAnnotatedFrameStore() for camera_id in camera_ids}
+    calls: list[str] = []
+    execution_lock = threading.Lock()
+    adapters = {
+        camera_id: RecordingAdapter(camera_id, calls, execution_lock)
+        for camera_id in camera_ids
+    }
+    validators = {
+        camera_id: TemporalValidator(TemporalValidationConfig(enabled=False))
+        for camera_id in camera_ids
+    }
+    engine = RoundRobinInferenceEngine(
+        frame_buffers=buffers,
+        model_adapters=adapters,
+        annotated_frame_stores=stores,
+        postprocessor=PostProcessor(confidence_threshold=0.01),
+        performance_monitor=PerformanceMonitor(),
+        temporal_validators=validators,
+    )
+    for sequence_id in (1, 4, 9):
+        buffers["camera_2"].publish(
+            FramePacket(
+                sequence_id=sequence_id,
+                captured_at=datetime.now(UTC),
+                frame=np.zeros((12, 16, 3), dtype=np.uint8),
+                camera_id="camera_2",
+            )
+        )
+
+    started = time.perf_counter()
+    engine.start()
+    wait_for(lambda: engine.get_latest_result("camera_2") is not None)
+    elapsed = time.perf_counter() - started
+    engine.stop()
+
+    result = engine.get_latest_result("camera_2")
+    assert result is not None
+    assert result.sequence_id == 9
+    assert calls == ["camera_2"]
+    assert elapsed < 0.1
 
 
 def wait_for(predicate, timeout_seconds: float = 1.0) -> None:

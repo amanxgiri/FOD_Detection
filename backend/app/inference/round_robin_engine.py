@@ -35,7 +35,7 @@ class RoundRobinInferenceEngine:
         performance_monitor: PerformanceMonitor,
         temporal_validators: dict[str, TemporalValidator],
         frame_renderer: FrameRenderer | None = None,
-        slot_timeout_seconds: float = 0.2,
+        idle_backoff_seconds: float = 0.001,
     ) -> None:
         camera_ids = tuple(frame_buffers)
         if len(camera_ids) != 3:
@@ -55,7 +55,7 @@ class RoundRobinInferenceEngine:
         self._performance_monitor = performance_monitor
         self._temporal_validators = temporal_validators
         self._frame_renderer = frame_renderer or FrameRenderer()
-        self._slot_timeout_seconds = slot_timeout_seconds
+        self._idle_backoff_seconds = max(0.0, idle_backoff_seconds)
 
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -122,22 +122,27 @@ class RoundRobinInferenceEngine:
 
     def _scheduler_loop(self) -> None:
         while not self._stop_event.is_set():
+            inferred_in_cycle = False
             for camera_id in self._camera_ids:
                 if self._stop_event.is_set():
                     break
-                self._run_slot(camera_id)
+                inferred_in_cycle = self._run_slot(camera_id) or inferred_in_cycle
+            if not inferred_in_cycle:
+                self._stop_event.wait(self._idle_backoff_seconds)
 
-    def _run_slot(self, camera_id: str) -> None:
-        packet = self._frame_buffers[camera_id].wait_for_newer(
-            self._last_sequence_ids[camera_id],
-            timeout=self._slot_timeout_seconds,
-        )
+    def _run_slot(self, camera_id: str) -> bool:
+        # A turn is a non-blocking snapshot, never a dequeue operation. Frames
+        # overwritten before this instant are deliberately skipped forever.
+        packet = self._frame_buffers[camera_id].get_latest()
         with self._lock:
             self._slot_count += 1
-        if packet is None:
+        if (
+            packet is None
+            or packet.sequence_id <= self._last_sequence_ids[camera_id]
+        ):
             with self._lock:
                 self._missed_slots += 1
-            return
+            return False
 
         skipped_frames = max(
             0,
@@ -190,3 +195,4 @@ class RoundRobinInferenceEngine:
         finally:
             with self._lock:
                 self._active_camera_id = None
+        return True

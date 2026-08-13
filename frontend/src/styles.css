@@ -193,6 +193,17 @@ h2 {
   top: 14px;
 }
 
+.latency-badge {
+  background: rgba(10, 18, 24, 0.82);
+  border-radius: 6px;
+  bottom: 12px;
+  color: #d8fbea;
+  font-size: 0.72rem;
+  padding: 5px 8px;
+  position: absolute;
+  right: 12px;
+}
+
 .side-panel {
   display: grid;
   gap: 14px;

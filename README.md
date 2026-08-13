@@ -291,7 +291,7 @@ MODEL_3_SOURCE_PATH=backend/models/weights/model_3.pt
 MODEL_RUNTIME=tensorrt
 MODEL_DEVICE=cuda:0
 MODEL_FOD_CLASS_ID=0
-INFERENCE_SLOT_TIMEOUT_SECONDS=0.20
+INFERENCE_IDLE_BACKOFF_SECONDS=0.001
 ```
 
 A camera source may be an OpenCV camera index, video-file path, or supported
@@ -299,7 +299,9 @@ stream URL. Keep each engine permanently assigned to the corresponding camera.
 
 The three capture threads continuously decode their independent streams and
 keep only the latest frame. The inference scheduler still executes one model at
-a time in the order camera 1, camera 2, camera 3. This is scheduler ordering,
+a time in the order camera 1, camera 2, camera 3. Each turn takes a non-blocking
+snapshot of that camera's latest frame; it never waits for or drains queued
+frames. This is scheduler ordering,
 not exposure-level synchronization: exact cross-camera timing would require
 clock synchronization (NTP/PTP), source timestamps, and additional application
 logic.
