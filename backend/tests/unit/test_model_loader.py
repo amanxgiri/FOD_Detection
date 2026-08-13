@@ -12,6 +12,7 @@ from app.inference.model_adapter import (
 )
 from app.inference.model_loader import (
     create_model_adapter,
+    create_model_adapters,
     validate_engine_model,
     validate_source_model,
 )
@@ -44,8 +45,16 @@ def test_validate_engine_model_accepts_engine_file(tmp_path: Path) -> None:
     validate_engine_model(engine)
 
 
-def test_create_model_adapter_uses_auto_runtime_by_default() -> None:
+def test_create_model_adapter_uses_tensorrt_runtime_by_default() -> None:
     settings = Settings()
+
+    adapter = create_model_adapter(settings)
+
+    assert isinstance(adapter, TensorRTModelAdapter)
+
+
+def test_create_model_adapter_supports_legacy_auto_runtime() -> None:
+    settings = Settings(model_runtime="auto")
 
     adapter = create_model_adapter(settings)
 
@@ -58,6 +67,18 @@ def test_create_model_adapter_uses_tensorrt_runtime() -> None:
     adapter = create_model_adapter(settings)
 
     assert isinstance(adapter, TensorRTModelAdapter)
+
+
+def test_create_model_adapters_maps_each_camera_to_its_engine() -> None:
+    settings = Settings()
+
+    adapters = create_model_adapters(settings)
+
+    assert tuple(adapters) == ("camera_1", "camera_2", "camera_3")
+    assert all(isinstance(adapter, TensorRTModelAdapter) for adapter in adapters.values())
+    assert adapters["camera_1"].engine_path.name == "model_1.engine"
+    assert adapters["camera_2"].engine_path.name == "model_2.engine"
+    assert adapters["camera_3"].engine_path.name == "model_3.engine"
 
 
 def test_create_model_adapter_uses_pt_runtime() -> None:

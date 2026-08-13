@@ -16,16 +16,18 @@ export function SystemStatus({ status }: SystemStatusProps) {
           <dt>API</dt>
           <dd>{status.error ? "Offline" : data?.backend_status ?? "Checking"}</dd>
         </div>
+        {(["camera_1", "camera_2", "camera_3"] as const).map((cameraId) => (
+          <div key={cameraId}>
+            <dt>{cameraId.replace("_", " ")}</dt>
+            <dd>
+              {formatStatus(data?.camera_statuses?.[cameraId])} / {formatStatus(
+                data?.model_statuses?.[cameraId]
+              )}
+            </dd>
+          </div>
+        ))}
         <div>
-          <dt>Camera</dt>
-          <dd>{formatStatus(data?.camera_status)}</dd>
-        </div>
-        <div>
-          <dt>Model</dt>
-          <dd>{formatStatus(data?.model_status)}</dd>
-        </div>
-        <div>
-          <dt>Inference worker</dt>
+          <dt>Inference scheduler</dt>
           <dd>{formatStatus(data?.inference_status)}</dd>
         </div>
         <div>

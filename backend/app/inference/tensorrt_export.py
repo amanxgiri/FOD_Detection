@@ -3,8 +3,9 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
+from app.core.paths import resolve_project_path
 from app.inference.model_adapter import (
     ModelArtifactNotFoundError,
     ModelIntegrationError,
@@ -96,3 +97,40 @@ def format_export_config(config: TensorRTExportConfig) -> str:
         f"  half={config.half}\n"
         f"  workspace={config.workspace}"
     )
+
+
+def ensure_tensorrt_engines(
+    source_paths: dict[str, Path],
+    engine_paths: dict[str, Path],
+    device: str,
+    image_size: int,
+    exporter: Callable[[TensorRTExportConfig], Path] = export_tensorrt_engine,
+) -> list[Path]:
+    """Export missing engines when their corresponding source models exist."""
+    if set(source_paths) != set(engine_paths):
+        raise ModelIntegrationError(
+            "TensorRT source and engine mappings must contain the same camera IDs"
+        )
+
+    generated: list[Path] = []
+    for camera_id, configured_source_path in source_paths.items():
+        source_path = resolve_project_path(configured_source_path)
+        engine_path = resolve_project_path(engine_paths[camera_id])
+        if engine_path.exists() or not source_path.exists():
+            continue
+
+        try:
+            generated_path = exporter(
+                TensorRTExportConfig(
+                    source_path=source_path,
+                    engine_path=engine_path,
+                    device=device,
+                    image_size=image_size,
+                )
+            )
+        except Exception as exc:
+            raise ModelIntegrationError(
+                f"automatic TensorRT export failed for {camera_id}: {exc}"
+            ) from exc
+        generated.append(generated_path)
+    return generated

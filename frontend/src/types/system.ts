@@ -1,7 +1,12 @@
 export interface SystemStatusResponse {
   camera_status: string;
+  camera_statuses: Record<string, string>;
   model_status: string;
+  model_statuses: Record<string, string>;
   inference_status: string;
+  active_camera_id: string | null;
+  scheduler_slot_count: number;
+  scheduler_missed_slots: number;
   backend_status: string;
   websocket_status: string;
   capture_fps: number;

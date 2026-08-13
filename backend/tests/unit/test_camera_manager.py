@@ -120,3 +120,11 @@ def test_camera_status_transitions_cover_disconnect_and_reconnect() -> None:
     assert CameraStatus.OFFLINE in statuses
     assert CameraStatus.ONLINE in statuses
     assert statuses[-1] == CameraStatus.STOPPED
+
+
+def test_camera_source_normalization_preserves_linux_devices_and_stream_urls() -> None:
+    assert CameraManager._normalize_source("/dev/video0") == "/dev/video0"
+    assert CameraManager._normalize_source("rtsp://camera.local/live") == (
+        "rtsp://camera.local/live"
+    )
+    assert CameraManager._normalize_source("2") == 2

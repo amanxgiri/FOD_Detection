@@ -69,7 +69,7 @@ export function Dashboard() {
     <main className="app-shell">
       <section className="topbar" aria-label="Dashboard summary">
         <div>
-          <p className="eyebrow">Single-camera prototype</p>
+          <p className="eyebrow">Three-camera round-robin prototype</p>
           <h1>FOD Detection</h1>
         </div>
         <div className="topbar-actions">
@@ -131,7 +131,17 @@ export function Dashboard() {
       </section>
 
       <section className="dashboard-grid">
-        <LiveCamera backendOnline={backendOnline} cameraStatus={cameraStatus} />
+        <div className="camera-grid" aria-label="Three independent camera feeds">
+          {(["camera_1", "camera_2", "camera_3"] as const).map((cameraId) => (
+            <LiveCamera
+              key={cameraId}
+              backendOnline={backendOnline}
+              cameraId={cameraId}
+              modelId={cameraId.replace("camera", "model")}
+              cameraStatus={data?.camera_statuses?.[cameraId] ?? cameraStatus}
+            />
+          ))}
+        </div>
         <div className="side-panel">
           <ActiveAlert
             icon={<AlertTriangle size={18} />}

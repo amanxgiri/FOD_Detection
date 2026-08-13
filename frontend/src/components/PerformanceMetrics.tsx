@@ -29,6 +29,14 @@ export function PerformanceMetrics({ status }: PerformanceMetricsProps) {
           <dt>Confirmed count</dt>
           <dd>{status?.total_confirmed_detections ?? "Unavailable"}</dd>
         </div>
+        <div>
+          <dt>Active slot</dt>
+          <dd>{status?.active_camera_id?.replace("_", " ") ?? "Idle"}</dd>
+        </div>
+        <div>
+          <dt>Missed slots</dt>
+          <dd>{status?.scheduler_missed_slots ?? "Unavailable"}</dd>
+        </div>
       </dl>
     </section>
   );

@@ -33,3 +33,28 @@ def test_stream_endpoint_returns_placeholder_without_running_inference() -> None
 
     assert response.status_code == 200
     assert b"Content-Type: image/jpeg" in response.content
+
+
+def test_camera_specific_stream_uses_requested_store() -> None:
+    app = create_app()
+    app.state.annotated_frame_stores["camera_2"].publish(
+        AnnotatedFrame(
+            sequence_id=7,
+            captured_at=datetime.now(UTC),
+            frame=np.full((20, 30, 3), 160, dtype=np.uint8),
+        )
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/v1/cameras/camera_2/stream?frame_limit=1")
+
+    assert response.status_code == 200
+    assert b"Content-Type: image/jpeg" in response.content
+
+
+def test_unknown_camera_stream_returns_not_found() -> None:
+    client = TestClient(create_app())
+
+    response = client.get("/api/v1/cameras/camera_9/stream?frame_limit=1")
+
+    assert response.status_code == 404

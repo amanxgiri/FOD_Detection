@@ -6,7 +6,9 @@ const backendOrigin =
   `${window.location.protocol}//${window.location.hostname || "localhost"}:8000`;
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? `${backendOrigin}/api/v1`;
-export const STREAM_URL = `${API_BASE_URL}/stream`;
+export function cameraStreamUrl(cameraId: string) {
+  return `${API_BASE_URL}/cameras/${cameraId}/stream`;
+}
 
 export async function fetchHealth() {
   const response = await fetch(`${API_BASE_URL}/health`);

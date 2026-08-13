@@ -124,7 +124,9 @@ def test_inference_runtime_requires_running_camera() -> None:
         response = client.post("/api/v1/runtime/inference/start")
 
         assert response.status_code == 409
-        assert response.json()["detail"] == "camera must be running before inference starts"
+        assert response.json()["detail"] == (
+            "all three cameras must be running before inference starts"
+        )
 
 
 def create_runtime_app(adapter: FakeModelAdapter | None = None):

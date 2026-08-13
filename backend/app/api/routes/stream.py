@@ -15,12 +15,13 @@ router = APIRouter()
 BOUNDARY = "frame"
 
 
-@router.get("/stream")
+@router.get("/cameras/{camera_id}/stream")
 def stream_video(
     request: Request,
+    camera_id: str,
     frame_limit: int | None = Query(default=None, ge=1, include_in_schema=False),
 ) -> StreamingResponse:
-    store = get_annotated_frame_store(request)
+    store = get_annotated_frame_store(request, camera_id)
     settings = get_settings()
     return StreamingResponse(
         iter_mjpeg_frames(
@@ -32,12 +33,31 @@ def stream_video(
     )
 
 
-def get_annotated_frame_store(request: Request) -> LatestAnnotatedFrameStore:
-    store = getattr(request.app.state, "annotated_frame_store", None)
-    if store is None:
-        store = LatestAnnotatedFrameStore()
-        request.app.state.annotated_frame_store = store
-    return store
+@router.get("/stream", include_in_schema=False)
+def stream_video_compatibility(
+    request: Request,
+    frame_limit: int | None = Query(default=None, ge=1, include_in_schema=False),
+) -> StreamingResponse:
+    return stream_video(request, "camera_1", frame_limit)
+
+
+def get_annotated_frame_store(
+    request: Request,
+    camera_id: str = "camera_1",
+) -> LatestAnnotatedFrameStore:
+    if camera_id not in {"camera_1", "camera_2", "camera_3"}:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail=f"unknown camera: {camera_id}")
+    stores = getattr(request.app.state, "annotated_frame_stores", None)
+    if not isinstance(stores, dict):
+        stores = {
+            known_id: LatestAnnotatedFrameStore()
+            for known_id in ("camera_1", "camera_2", "camera_3")
+        }
+        request.app.state.annotated_frame_stores = stores
+        request.app.state.annotated_frame_store = stores["camera_1"]
+    return stores[camera_id]
 
 
 def iter_mjpeg_frames(

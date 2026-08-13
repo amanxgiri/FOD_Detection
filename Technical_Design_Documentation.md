@@ -1,7 +1,7 @@
 ## Technical Design and Implementation Specification
 
-**Document Status:** Initial Technical Specification  
-**Project Type:** Single-Camera Real-Time FOD Detection Prototype  
+**Document Status:** Revised Technical Specification
+**Project Type:** Three-Camera Round-Robin Real-Time FOD Detection Prototype
 **Primary Purpose:** Implementation specification for Codex  
 **Primary Backend Language:** Python  
 **Frontend:** React + TypeScript  
@@ -11,39 +11,41 @@
 
 # 1. Project Overview
 
-The purpose of this project is to build a prototype application that performs real-time Foreign Object Debris (FOD) detection from a single camera feed.
+The purpose of this project is to build a prototype application that performs real-time Foreign Object Debris (FOD) detection from three independent camera feeds.
 
-A trained object-detection model already exists and its saved model weights will be integrated into the application for inference.
+Each camera has its own independently trained object-detection model. The three models are intentionally distinct and their detections remain associated with their source camera and model.
 
-The model weights will be supplied to the project as:
+The source model weights will be supplied to the project as three artifacts:
 
 ```text
-model_weight.pt
+model_1.pt
+model_2.pt
+model_3.pt
 ```
 
-The supplied `.pt` file is the source model artifact. The prototype deployment workflow supports an optimized TensorRT engine on NVIDIA GPU hosts and a portable `.pt` fallback path for machines without CUDA/TensorRT support.
+Each `.pt` file is a source artifact used to produce a corresponding TensorRT engine. The deployed runtime must use `model_1.engine`, `model_2.engine`, and `model_3.engine`. Each engine is permanently assigned to its matching camera. Portable `.pt` fallback is not part of the three-camera deployment runtime.
 
 The prototype must:
 
-1. capture frames continuously from one camera;
+1. capture frames continuously and independently from three cameras;
     
-2. run trained-model inference on the captured frames;
+2. preserve all three feeds as separate views without stitching, panoramic composition, or pixel-level fusion;
     
-3. post-process model detections;
+3. run exactly one TensorRT engine inference at a time using a synchronized three-slot round-robin schedule;
     
-4. optionally validate detections across multiple recent frames;
+4. route camera 1 to model 1 in slot 1, camera 2 to model 2 in slot 2, and camera 3 to model 3 in slot 3, then repeat;
     
-5. display an annotated live feed in a browser;
+5. post-process and optionally temporally validate each camera's detections independently;
     
-6. generate real-time FOD alerts;
+6. display three independent annotated live feeds in a browser;
     
-7. save confirmed detection metadata;
+7. generate camera- and model-attributed real-time FOD alerts;
     
-8. save evidence images for confirmed detections;
+8. save confirmed detection metadata and evidence images with camera and model identity;
     
 9. allow an operator to view and acknowledge alerts;
     
-10. expose basic performance and system-health information.
+10. expose per-camera, per-model, and scheduler performance and system-health information.
     
 
 This project is a **prototype**, not a production airport deployment.
@@ -58,13 +60,15 @@ The implementation must therefore remain modular and maintainable without introd
 
 The initial prototype includes:
 
-- one physical camera;
+- three physical cameras with independent capture workers and feeds;
     
-- one model loaded into memory;
+- three distinct TensorRT engine models loaded and assigned one-to-one to the cameras;
     
 - real-time frame capture;
     
-- real-time inference;
+- serialized, synchronized round-robin inference with only one active engine execution at any instant;
+
+- inference of camera 1 frames numbered `1, 4, 7, ...`, camera 2 frames numbered `2, 5, 8, ...`, and camera 3 frames numbered `3, 6, 9, ...` within a shared synchronized frame-tick sequence;
     
 - confidence filtering;
     
@@ -72,7 +76,7 @@ The initial prototype includes:
     
 - optional temporal detection validation;
     
-- annotated browser video stream;
+- three separate annotated browser video streams;
     
 - real-time FOD alert events;
     
@@ -84,9 +88,9 @@ The initial prototype includes:
     
 - SQLite metadata storage;
     
-- camera health reporting;
+- per-camera health reporting;
     
-- inference performance reporting;
+- per-model and scheduler inference performance reporting;
     
 - smoke tests;
     
@@ -101,17 +105,13 @@ The initial prototype includes:
 
 The following must not be implemented in the first prototype unless the specification is intentionally revised later:
 
-- multiple cameras;
-    
-- camera synchronization;
-    
 - camera calibration workflows;
     
 - image stitching;
     
 - panoramic frame generation;
     
-- multi-view fusion;
+- multi-view image or detection fusion;
     
 - cross-camera tracking;
     
@@ -133,7 +133,7 @@ The following must not be implemented in the first prototype unless the specific
     
 - SMS or email alert delivery;
     
-- multi-model ensemble inference;
+- ensemble voting or automatic cross-model consensus; the three inference paths remain independent;
     
 - anomaly-detection models;
     
@@ -142,7 +142,7 @@ The following must not be implemented in the first prototype unless the specific
 - remote model registry integration.
     
 
-The repository architecture should allow future development, but Codex must not prematurely implement these capabilities.
+The repository architecture should allow future development, but Codex must not prematurely implement these capabilities. Three-camera capture and the round-robin scheduler are explicitly in scope; stitching and inference-result fusion are not.
 
 ---
 # 3. Incremental Development and Testing Strategy
@@ -474,13 +474,13 @@ The goal of this development strategy is to make failures easier to isolate, red
 
 # 4. Core Design Principles
 
-## 4.1 Single Ownership of the Camera
+## 4.1 Single Ownership of Each Camera
 
-Only the camera subsystem may directly interact with the camera device.
+Only the camera subsystem may directly interact with the three camera devices.
 
 The API layer, frontend, inference engine, and alert manager must never open their own camera connections.
 
-The camera must have one owner:
+Each camera must have exactly one owner. The required ownership mapping is one `CameraManager` and one bounded `LatestFrameBuffer` per camera. No manager or buffer may be shared across camera devices.
 
 ```text
 Camera Device
@@ -514,7 +514,7 @@ send network response
 read next camera frame
 ```
 
-Instead, camera capture and inference must run independently.
+Instead, all camera capture workers and the shared inference scheduler must run independently.
 
 Required design:
 
@@ -537,9 +537,46 @@ For this real-time monitoring prototype, recent information has greater value th
 
 Therefore:
 
-> The inference worker should process the newest available frame and may intentionally skip intermediate frames when inference is slower than camera capture.
+> The scheduler must intentionally infer only one of the three synchronized feeds per frame tick. Each camera is inferred once every three ticks, while capture and raw-feed publication continue on every tick.
 
 This is an architectural requirement for this project.
+
+### 4.2.1 Synchronized Three-Slot Inference Schedule
+
+Let `tick` be a monotonically increasing synchronized frame tick shared by the three capture streams. The inference slot is selected by:
+
+```text
+selected_camera = ((tick - 1) mod 3) + 1
+```
+
+The required schedule is:
+
+| Synchronized tick | Camera 1 frame | Camera 2 frame | Camera 3 frame | Engine executed |
+|---:|---|---|---|---|
+| 1 | infer | skip | skip | `model_1.engine` |
+| 2 | skip | infer | skip | `model_2.engine` |
+| 3 | skip | skip | infer | `model_3.engine` |
+| 4 | infer | skip | skip | `model_1.engine` |
+| 5 | skip | infer | skip | `model_2.engine` |
+| 6 | skip | skip | infer | `model_3.engine` |
+
+Here, `skip` means no model inference for that camera frame. It does not mean capture, display, timestamping, or health monitoring stops. The scheduler repeats this three-slot cycle indefinitely.
+
+The scheduler must serialize GPU execution with a single inference worker or an equivalent exclusive execution lock. It must never dispatch two engine calls concurrently. This removes the resource contention caused by simultaneous execution of all three models. It preserves the minimal execution latency of an individual engine call, but deliberately reduces each camera's inference cadence to one-third of the synchronized capture cadence. For a capture rate of `F` frames per second, each camera's nominal inference rate is `F / 3`, subject to engine execution time and synchronization overhead.
+
+Camera synchronization must not allow an unbounded queue to accumulate. The synchronization layer may use bounded per-camera slots keyed by tick. If the selected camera's exact frame is unavailable after a configurable short deadline, the scheduler must record a missed slot and advance; it must not reuse a stale frame or block the other cameras indefinitely.
+
+### 4.2.2 Independent Verification Semantics
+
+The three cameras observe somewhat similar operational areas, and each feed is evaluated by a distinct model. This supplies three independent detection paths for operational comparison. Independence means:
+
+- camera 1 frames are evaluated only by model 1;
+- camera 2 frames are evaluated only by model 2;
+- camera 3 frames are evaluated only by model 3;
+- detections, confidence scores, temporal histories, metrics, alerts, and evidence retain their camera/model identity;
+- a detection from one lane is never copied into or presented as a detection from another lane.
+
+This revision does not define automated majority voting, score averaging, cross-camera tracking, or a fused verification decision. If later required, consensus logic must be added as a separate downstream component without changing the one-engine-at-a-time scheduler.
 
 ---
 
@@ -566,59 +603,65 @@ ModelAdapter
 Current Trained Model
 ```
 
-The first adapter should support the format of the currently saved prototype model weights.
+The adapter must support the TensorRT engine format used by all three deployed models.
 
-The initial expected weight path is:
-
-```text
-backend/models/weights/model_weight.pt
-```
-
-If the existing weights use an Ultralytics-compatible runtime, implement:
+The deployed engine paths are:
 
 ```text
-UltralyticsModelAdapter
+backend/models/weights/model_1.engine
+backend/models/weights/model_2.engine
+backend/models/weights/model_3.engine
 ```
 
-If the current saved weights require another runtime, the implementation must preserve the same adapter interface and replace only the adapter implementation.
+For an Ultralytics-compatible TensorRT runtime, implement:
+
+```text
+TensorRTModelAdapter
+```
+
+If a source model cannot be exported to a compatible TensorRT engine, deployment readiness must fail clearly. Any future runtime change requires an explicit specification revision while preserving the same adapter interface.
 
 The rest of the system must receive normalized application-level detection objects and must not depend on raw detector-library result objects.
 
-### 4.3.1 Model Weight, TensorRT Deployment Path, and Portable Fallback
+### 4.3.1 Three-Model TensorRT Deployment Path
 
-The user will provide the trained model weights as:
+The user will provide three distinct trained source models:
 
 ```text
-backend/models/weights/model_weight.pt
+backend/models/weights/model_1.pt
+backend/models/weights/model_2.pt
+backend/models/weights/model_3.pt
 ```
 
-This `.pt` model is the source model artifact.
+These `.pt` files are source artifacts. They are not the deployed inference format.
 
-For the optimized prototype runtime, the model should be exported to TensorRT engine format:
+Each source model must be exported separately to its matching TensorRT engine. The permanent assignment is model 1 to camera 1, model 2 to camera 2, and model 3 to camera 3.
 
 ```text
-model_weight.pt
+model_N.pt
         │
         ▼
 TensorRT export
         │
         ▼
-model_weight.engine
+model_N.engine
         │
         ▼
 TensorRT runtime inference
         │
         ▼
-NVIDIA GPU
+NVIDIA GPU (serialized execution shared by all three engines)
 ```
 
-The optimized inference pipeline uses:
+The deployment inference pipeline uses:
 
 ```text
-backend/models/weights/model_weight.engine
+backend/models/weights/model_1.engine
+backend/models/weights/model_2.engine
+backend/models/weights/model_3.engine
 ```
 
-The `.pt` source model must be retained so that the TensorRT engine can be regenerated when the target GPU, CUDA, TensorRT, model input configuration, or deployment environment changes. It is also the portable fallback artifact for macOS, Linux, and machines without CUDA/TensorRT.
+Each `.pt` source model must be retained so its matching TensorRT engine can be regenerated when the target GPU, CUDA, TensorRT, model input configuration, or deployment environment changes. Production-like three-camera execution requires all three `.engine` files and does not silently fall back to `.pt` models.
 
 The export process must be implemented as a separate script:
 
@@ -628,10 +671,10 @@ scripts/export_tensorrt.py
 
 The export script must:
 
-- load `model_weight.pt`;
+- accept a source/output pair and export each of `model_1.pt`, `model_2.pt`, and `model_3.pt`;
 - validate that an NVIDIA CUDA-capable GPU is available;
 - export the model to TensorRT engine format;
-- save the generated engine as `model_weight.engine`;
+- save the generated engines as `model_1.engine`, `model_2.engine`, and `model_3.engine`;
 - report the export configuration;
 - fail clearly when export cannot be completed;
 - not silently fall back to CPU during TensorRT export.
@@ -673,10 +716,10 @@ because their PyO3 build dependency does not support Python 3.14.
 The CUDA dependency set assumes an NVIDIA GPU and driver compatible with CUDA
 12.x. If the deployment machine uses a different CUDA major version, the PyTorch
 and TensorRT wheel lines in `backend/requirements.txt` must be adjusted before
-installation. Machines without CUDA/TensorRT should install
-`backend/requirements-cpu.txt`; the default `MODEL_RUNTIME=auto` will try the
-TensorRT engine first and then fall back to the `.pt` model on
-`MODEL_FALLBACK_DEVICE`.
+installation. The three-camera deployment host must provide compatible CUDA and
+TensorRT runtimes. A CPU-only dependency set may still be used for unit tests and
+non-inference development, but it is not an operational fallback for the required
+three-engine pipeline.
 
 The expected deployment workflow is:
 
@@ -698,34 +741,43 @@ The equivalent Git Bash path is:
 ./.venv/Scripts/python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
 ```
 
-The user-supplied `model_weight.pt` is committed or uploaded as the portable
-source artifact. The committed `model_weight.engine` is a convenience artifact
-for compatible NVIDIA/CUDA/TensorRT machines. TensorRT engines remain
+The user-supplied `model_1.pt`, `model_2.pt`, and `model_3.pt` files are retained
+as source artifacts. Their corresponding `.engine` files are the required
+deployment artifacts. TensorRT engines remain
 hardware/runtime-specific and must be regenerated on the target deployment
 machine when the GPU, driver, CUDA, TensorRT, input size, or model version
 changes. Additional generated `.engine` files and intermediate `.onnx` files are
 ignored by git.
 
-After export, the generated engine must be validated before integration into the live inference pipeline.
+After export, all three generated engines must be validated independently and then validated together under the serialized round-robin scheduler before integration into the live inference pipeline.
 
 Validation must include:
 
 ```text
-[ ] TensorRT engine file exists
-[ ] TensorRT engine loads successfully
+[ ] all three TensorRT engine files exist
+[ ] each TensorRT engine loads successfully
 [ ] inference runs on the NVIDIA GPU
 [ ] known test image can be processed
 [ ] output detections can be normalized
 [ ] output shape and class mapping are correct
 [ ] no unexpected numerical or detection-format regression is introduced
 [ ] inference latency is measured
+[ ] each engine remains permanently mapped to its assigned camera
+[ ] the scheduler never overlaps engine executions
+[ ] the repeating slot order is camera 1, camera 2, camera 3
 ```
 
-The runtime model adapter should use `MODEL_RUNTIME=auto` by default. In auto
-mode, it loads `model_weight.engine` when TensorRT prerequisites are available
-and falls back to `model_weight.pt` when the engine path cannot run on the
-current machine. Strict deployments can set `MODEL_RUNTIME=tensorrt` to require
-the engine-only path.
+The deployment runtime must use strict TensorRT mode. Startup succeeds only when
+all three engine files load and warm up successfully. A missing or incompatible
+engine is a visible model-path failure; the application must not silently replace
+it with a `.pt` model because doing so would invalidate latency and scheduling
+assumptions.
+
+During backend startup, each configured `.pt`/`.engine` pair must be checked
+before the camera runtime begins. If a source `.pt` exists and its corresponding
+engine does not, the backend must export that model to the configured TensorRT
+engine path automatically. It must never overwrite an existing engine. Export
+failure must stop startup with the affected camera/model identity in the error.
 
 ---
 
@@ -733,9 +785,11 @@ the engine-only path.
 
 The following must be configurable:
 
-- camera source;
+- all three camera sources and their stable camera IDs;
     
-- model path;
+- all three engine paths and their fixed camera-to-model assignments;
+
+- synchronization tolerance and inference-slot deadline;
     
 - inference image size;
     
@@ -797,9 +851,9 @@ PyTorch provides inference mode for workloads where operations do not require au
 
 SQLAlchemy will provide the backend persistence abstraction over the prototype SQLite database. SQLAlchemy describes itself as a Python SQL toolkit and object-relational mapper.
 
-The target optimized inference hardware for this prototype is an NVIDIA CUDA-capable GPU. The supplied `model_weight.pt` model can be exported to a TensorRT `model_weight.engine` artifact, and compatible NVIDIA deployments should use the validated TensorRT engine for the fastest runtime path.
+The target inference hardware is an NVIDIA CUDA-capable GPU. The three supplied source models must be exported to three TensorRT engine artifacts and validated on the target host.
 
-For portability, the default runtime is `auto`: TensorRT is attempted first, and if CUDA, TensorRT, or the engine is unavailable, runtime inference falls back to the `.pt` model on the configured fallback device. Strict TensorRT deployments can disable fallback with `MODEL_RUNTIME=tensorrt`.
+The three-camera runtime is strict TensorRT. All engines may remain loaded, but a shared scheduler permits only one engine execution at a time. This avoids concurrent GPU contention while maintaining independent model outputs.
 
 ---
 
@@ -851,8 +905,24 @@ FastAPI provides WebSocket handling and streaming-response facilities required b
 
 # 6. High-Level System Architecture
 
+The system contains three independent capture and processing lanes coordinated by one serialized inference scheduler:
+
 ```text
-                         PHYSICAL CAMERA
+Camera 1 --> Buffer 1 --\
+Camera 2 --> Buffer 2 ----> RoundRobinInferenceScheduler --> one engine call at a time
+Camera 3 --> Buffer 3 --/             |
+                                      +--> slot 1: Model 1 + Camera 1
+                                      +--> slot 2: Model 2 + Camera 2
+                                      +--> slot 3: Model 3 + Camera 3
+                                                   |
+                                                   v
+                              Per-camera results, annotations, alerts, and streams
+```
+
+There is no image stitching or panoramic composition. The detailed pipeline diagram below represents one selected camera/model lane; that lane is instantiated three times, while its `InferenceEngine` entry is controlled by the shared scheduler.
+
+```text
+                    SELECTED CAMERA LANE (ONE OF THREE)
                                 │
                                 ▼
                     ┌─────────────────────┐
@@ -936,17 +1006,18 @@ FastAPI provides WebSocket handling and streaming-response facilities required b
 ## 7.1 Normal Frame Flow
 
 ```text
-1. CameraManager captures frame
-2. Frame receives sequence number and timestamp
-3. LatestFrameBuffer replaces previous frame
-4. InferenceEngine requests latest unprocessed frame
-5. ModelAdapter performs prediction
-6. Model output is normalized
-7. PostProcessor applies filters
-8. TemporalValidator updates recent detection state
-9. Bounding boxes are rendered
-10. Latest annotated frame becomes available to stream endpoint
-11. Metrics are updated
+1. All three CameraManager instances capture their current frames independently.
+2. Each frame receives a camera ID, per-camera sequence number, synchronized tick, and timestamp.
+3. Each camera's bounded LatestFrameBuffer replaces its previous frame.
+4. RoundRobinInferenceScheduler selects the camera for the current tick.
+5. Non-selected camera frames remain available for live display but skip inference.
+6. The scheduler invokes only the ModelAdapter permanently assigned to the selected camera.
+7. The selected TensorRT engine performs prediction under exclusive GPU execution ownership.
+8. Model output is normalized and tagged with camera ID, model ID, tick, and source sequence number.
+9. The selected camera's PostProcessor and independent TemporalValidator state are updated.
+10. Bounding boxes are rendered on that camera's selected frame; skipped frames may retain the latest valid overlay with its inference age clearly tracked.
+11. The corresponding latest annotated frame becomes available to that camera's stream endpoint.
+12. Per-camera, per-model, and scheduler metrics are updated.
 ```
 
 ---
@@ -1125,6 +1196,8 @@ fod-detection-prototype/
 └── README.md
 ```
 
+For the revised architecture, `backend/models/weights/` contains the three source `.pt` files and the three required `.engine` files. The inference package additionally contains a dedicated round-robin scheduler module, and the frontend component tree includes `LiveCameraGrid.tsx`. These additions supersede the single illustrative weight entry in the tree above.
+
 ---
 
 # 9. Backend Application Lifecycle
@@ -1139,16 +1212,16 @@ The required startup order is:
 1. Load configuration
 2. Configure logging
 3. Initialize database
-4. Initialize camera runtime
-5. Initialize camera
-6. Validate camera connection where possible
-7. Start capture worker
+4. Initialize the three-camera runtime and synchronization clock
+5. Initialize all three cameras
+6. Validate all camera connections where possible
+7. Start three independent capture workers
 8. Initialize WebSocket manager
 9. Mark system ready with inference stopped
-10. On operator Start Inference command, load configured model runtime
-11. In `auto` mode, try TensorRT engine and fall back to `.pt` if needed
-12. Warm up model where supported
-13. Start inference worker after model warmup
+10. On operator Start Inference command, load all three configured TensorRT engines
+11. Validate the fixed camera-to-engine mapping
+12. Warm up each engine sequentially under exclusive GPU ownership
+13. Start the single round-robin inference scheduler after all engine warmups succeed
 ```
 
 The health endpoint must not report the system as fully ready before all critical components have initialized.
@@ -1162,10 +1235,10 @@ Required shutdown:
 ```text
 1. Mark system as shutting down
 2. Stop accepting new long-running operations
-3. Stop inference worker
-4. Stop camera worker
-5. Release camera
-6. Close model resources where required
+3. Stop the round-robin inference scheduler
+4. Stop all camera workers
+5. Release all three cameras
+6. Close all three model resources where required
 7. close database resources
 8. close WebSocket connections
 9. complete process shutdown
@@ -1188,6 +1261,8 @@ backend/app/camera/camera_manager.py
 ```
 
 Responsibilities:
+
+Three `CameraManager` instances must be created from configuration, one per physical camera. Each instance owns only its assigned device and publishes only to its assigned buffer.
 
 - create camera connection;
     
@@ -1243,7 +1318,9 @@ class CameraManager:
 ```python
 @dataclass(frozen=True)
 class FramePacket:
+    camera_id: str
     sequence_id: int
+    synchronized_tick: int
     captured_at: datetime
     frame: np.ndarray
 ```
@@ -1259,7 +1336,9 @@ The source must be configurable.
 Example:
 
 ```env
-CAMERA_SOURCE=0
+CAMERA_1_SOURCE=0
+CAMERA_2_SOURCE=1
+CAMERA_3_SOURCE=2
 ```
 
 The implementation should also support a local video file as an alternate input source for development and repeatable testing.
@@ -1269,7 +1348,9 @@ OpenCV's `VideoCapture` interface accepts camera devices and video sources, whic
 Example:
 
 ```env
-CAMERA_SOURCE=backend/tests/fixtures/test_runway.mp4
+CAMERA_1_SOURCE=backend/tests/fixtures/camera_1.mp4
+CAMERA_2_SOURCE=backend/tests/fixtures/camera_2.mp4
+CAMERA_3_SOURCE=backend/tests/fixtures/camera_3.mp4
 ```
 
 ---
@@ -1317,7 +1398,7 @@ File:
 backend/app/camera/frame_buffer.py
 ```
 
-The latest-frame buffer is a critical component.
+One latest-frame buffer per camera is required. Together, the three buffers form the bounded input set read by the round-robin scheduler.
 
 It must:
 
@@ -1327,7 +1408,7 @@ It must:
     
 - be thread-safe;
     
-- allow the inference worker to wait for a newer sequence number;
+- allow the scheduler to retrieve the selected camera's frame for a synchronized tick or report that the slot was missed;
     
 - prevent unlimited memory growth.
     
@@ -1362,7 +1443,7 @@ File:
 backend/app/inference/model_adapter.py
 ```
 
-Define a model-independent interface.
+Define a model-independent interface. Create three adapter instances, each loaded from a different TensorRT engine and permanently registered to one camera ID. Adapter selection is made only by the scheduler mapping; detections from one adapter must never be attributed to another camera.
 
 Conceptual interface:
 
@@ -1392,6 +1473,10 @@ The application must not pass raw model-framework objects outside the inference 
 ```python
 @dataclass(frozen=True)
 class RawDetection:
+    camera_id: str
+    model_id: str
+    synchronized_tick: int
+    source_sequence_id: int
     class_id: int
     class_name: str
     confidence: float
@@ -1405,7 +1490,7 @@ All coordinates at this level refer to the original frame coordinate system.
 
 ---
 
-# 13. Inference Engine
+# 13. Round-Robin Inference Engine
 
 File:
 
@@ -1415,29 +1500,29 @@ backend/app/inference/inference_engine.py
 
 ## Responsibilities
 
-The inference engine must:
+The inference engine and scheduler must:
 
-1. wait for a new frame;
+1. advance through the repeating camera slots `1, 2, 3` using the synchronized tick;
     
-2. skip already processed sequence IDs;
+2. retrieve the selected camera's current frame and record a missed slot when it is unavailable;
     
-3. call the model adapter;
+3. call only the model adapter assigned to the selected camera;
     
-4. measure inference latency;
+4. guarantee that no second model call begins until the current call completes;
     
-5. send results to post-processing;
+5. measure execution latency, scheduler wait, slot misses, and result age;
     
-6. send normalized results to temporal validation;
+6. send results to the selected camera's post-processing and temporal-validation state;
     
-7. update the annotated-frame store;
+7. update only the selected camera's annotated-frame store and latest result;
     
-8. update performance metrics.
+8. update aggregate and per-camera/per-model performance metrics.
     
 
 Conceptual interface:
 
 ```python
-class InferenceEngine:
+class RoundRobinInferenceScheduler:
     def start(self) -> None:
         ...
 
@@ -1447,11 +1532,11 @@ class InferenceEngine:
     def is_running(self) -> bool:
         ...
 
-    def _inference_loop(self) -> None:
+    def _scheduler_loop(self) -> None:
         ...
 ```
 
-Where the current runtime is based on PyTorch, inference-only execution should use the appropriate PyTorch inference context when compatible with the model implementation. PyTorch documents `inference_mode` as an inference-oriented mode that disables autograd-related work such as view tracking and version-counter updates.
+The scheduler owns the right to execute inference. Camera workers, renderers, API handlers, and stream handlers must never call a model directly. Models may remain loaded between slots to avoid repeated initialization overhead.
 
 ---
 
@@ -1502,6 +1587,10 @@ Use an application-level type.
 ```python
 @dataclass(frozen=True)
 class Detection:
+    camera_id: str
+    model_id: str
+    synchronized_tick: int
+    source_sequence_id: int
     class_id: int
     class_name: str
     confidence: float
@@ -1544,7 +1633,7 @@ backend/app/detection/temporal_validator.py
 
 A single isolated prediction should not automatically have to become a confirmed FOD alert.
 
-The temporal validator will allow detections to be confirmed from repeated observations across a configurable recent-frame window.
+The temporal validator will allow detections to be confirmed from repeated observations across a configurable recent-inference window. Each camera/model pair must have isolated temporal state; detections from different cameras or models must never be merged into one temporal candidate.
 
 The initial implementation must remain simple.
 
@@ -1637,11 +1726,15 @@ Responsibilities:
 - display confidence value;
     
 - optionally indicate provisional versus confirmed detection status;
+
+- identify the source camera and inference age;
     
 - produce a frame ready for JPEG encoding.
     
 
 Do not mutate the original raw camera frame in the camera buffer.
+
+Each camera has its own annotated-frame store. On frames that do not receive an inference slot, the UI may display the current raw frame with the most recent valid overlay only if it also exposes the overlay age; it must not imply that the skipped frame itself was inferred.
 
 ---
 
@@ -1662,6 +1755,8 @@ Responsibilities:
 - prevent duplicate alert creation for the same confirmed candidate;
     
 - save detection metadata;
+
+- preserve `camera_id`, `model_id`, synchronized tick, and source sequence ID in every alert and record;
     
 - save evidence image;
     
@@ -1758,6 +1853,10 @@ detections
 ────────────────────────────────
 id
 event_timestamp
+camera_id
+model_id
+synchronized_tick
+source_sequence_id
 class_id
 class_name
 confidence
@@ -1836,9 +1935,9 @@ Response:
 {
   "status": "ok",
   "ready": true,
-  "camera": "online",
-  "model": "loaded",
-  "inference_worker": "running"
+  "cameras": {"camera_1": "online", "camera_2": "online", "camera_3": "online"},
+  "models": {"model_1": "loaded", "model_2": "loaded", "model_3": "loaded"},
+  "inference_scheduler": "running"
 }
 ```
 
@@ -1854,13 +1953,16 @@ Example response:
 
 ```json
 {
-  "camera_status": "online",
-  "model_status": "loaded",
+  "camera_statuses": {"camera_1": "online", "camera_2": "online", "camera_3": "online"},
+  "model_statuses": {"model_1": "loaded", "model_2": "loaded", "model_3": "loaded"},
   "inference_status": "running",
-  "capture_fps": 30.0,
-  "inference_fps": 24.3,
+  "active_slot": 2,
+  "active_camera_id": "camera_2",
+  "capture_fps": {"camera_1": 30.0, "camera_2": 30.0, "camera_3": 30.0},
+  "inference_fps": {"camera_1": 10.0, "camera_2": 10.0, "camera_3": 10.0},
   "average_inference_ms": 36.8,
-  "latest_frame_age_ms": 41,
+  "latest_frame_age_ms": {"camera_1": 41, "camera_2": 38, "camera_3": 45},
+  "scheduler_missed_slots": 0,
   "total_confirmed_detections": 12
 }
 ```
@@ -1893,6 +1995,8 @@ Example:
     {
       "id": "DET-20260707-000001",
       "timestamp": "2026-07-07T09:02:18Z",
+      "camera_id": "camera_2",
+      "model_id": "model_2",
       "class_name": "Bolt",
       "confidence": 0.91,
       "status": "ACTIVE",
@@ -1960,7 +2064,7 @@ Optional runtime-adjustable fields may later use:
 PATCH /api/v1/config
 ```
 
-Model path, database path, and camera device ownership settings should not be casually changed while the pipeline is running.
+Engine paths, camera-to-model assignments, synchronization settings, database path, and camera device ownership settings must not be changed while the pipeline is running.
 
 ---
 
@@ -1969,10 +2073,10 @@ Model path, database path, and camera device ownership settings should not be ca
 Endpoint:
 
 ```http
-GET /api/v1/stream
+GET /api/v1/cameras/{camera_id}/stream
 ```
 
-For the initial prototype, implement the live annotated feed as an HTTP streaming response using a multipart frame stream.
+Implement each of the three independent live annotated feeds as its own HTTP streaming response using a multipart frame stream. No endpoint may stitch or combine camera pixels.
 
 FastAPI provides `StreamingResponse` for streamed response bodies.
 
@@ -1994,7 +2098,7 @@ HTTP StreamingResponse
 Browser
 ```
 
-The video endpoint must consume the latest annotated frame.
+Each video endpoint must consume only the latest annotated frame belonging to its requested camera ID.
 
 It must not independently run model inference.
 
@@ -2072,6 +2176,10 @@ system.warning
   "timestamp": "2026-07-07T09:02:18Z",
   "data": {
     "detection_id": "DET-20260707-000001",
+    "camera_id": "camera_2",
+    "model_id": "model_2",
+    "synchronized_tick": 125,
+    "source_sequence_id": 125,
     "class_name": "Bolt",
     "confidence": 0.91,
     "bbox": {
@@ -2093,7 +2201,7 @@ The browser interface should use React components with TypeScript types correspo
 
 React's documented component approach supports dividing the interface into independently maintained UI elements.
 
-The first version must prioritize one main operator dashboard.
+The first version must prioritize one main operator dashboard containing three clearly identified, independent camera panels.
 
 ---
 
@@ -2127,21 +2235,26 @@ Suggested layout:
 
 ---
 
-## 25.1 LiveCamera Component
+## 25.1 LiveCameraGrid and LiveCamera Components
 
 File:
 
 ```text
 frontend/src/components/LiveCamera.tsx
+frontend/src/components/LiveCameraGrid.tsx
 ```
 
 Responsibilities:
 
-- display live backend stream;
+- render one reusable `LiveCamera` instance for each of the three camera IDs;
+
+- display each camera's independent backend stream without stitching;
     
 - show offline placeholder when unavailable;
     
 - display connection state;
+
+- display camera ID, assigned model ID, last inference tick, and inference age;
     
 - retry stream rendering when connectivity returns.
     
@@ -2190,8 +2303,9 @@ Display:
 
 ```text
 Camera
-Model
-Inference worker
+Assigned model
+Round-robin slot state
+Inference scheduler
 Backend connection
 WebSocket connection
 ```
@@ -2204,9 +2318,11 @@ Display available measured metrics:
 
 ```text
 Capture FPS
-Inference FPS
-Average inference latency
+Per-camera inference FPS
+Per-model average inference latency
 Latest frame age
+Latest inference age
+Missed scheduler slots
 Confirmed detection count
 ```
 
@@ -2248,17 +2364,23 @@ Example environment variables:
 APP_ENV=development
 LOG_LEVEL=INFO
 
-CAMERA_SOURCE=0
+CAMERA_1_SOURCE=0
+CAMERA_2_SOURCE=1
+CAMERA_3_SOURCE=2
 CAMERA_RECONNECT_DELAY_SECONDS=2
 
-MODEL_SOURCE_PATH=backend/models/weights/model_weight.pt
-MODEL_ENGINE_PATH=backend/models/weights/model_weight.engine
-MODEL_RUNTIME=auto
+MODEL_1_ENGINE_PATH=backend/models/weights/model_1.engine
+MODEL_2_ENGINE_PATH=backend/models/weights/model_2.engine
+MODEL_3_ENGINE_PATH=backend/models/weights/model_3.engine
+MODEL_RUNTIME=tensorrt
 MODEL_DEVICE=cuda:0
-MODEL_FALLBACK_DEVICE=cpu
 MODEL_CONFIDENCE_THRESHOLD=0.01
 MODEL_IOU_THRESHOLD=0.50
 MODEL_IMAGE_SIZE=640
+INFERENCE_SCHEDULE=round_robin
+INFERENCE_SLOT_COUNT=3
+INFERENCE_SLOT_DEADLINE_MS=50
+CAMERA_SYNC_TOLERANCE_MS=20
 
 TEMPORAL_VALIDATION_ENABLED=true
 TEMPORAL_WINDOW_SIZE=5
@@ -2279,7 +2401,7 @@ Values shown here are configuration examples and initial prototype defaults. The
 
 # 28. Concurrency Model
 
-The initial backend should use:
+The initial backend should use one FastAPI process, three capture workers, and one serialized inference scheduler. The scheduler is the only component authorized to execute any of the three loaded engines.
 
 ```text
 Main FastAPI application
@@ -2293,13 +2415,13 @@ Main FastAPI application
 
 The prototype must run with **one application worker process** because the current architecture assumes exclusive in-process ownership of:
 
-- one physical camera;
+- three physical cameras;
     
-- one loaded model;
+- three loaded TensorRT engines with one active execution at a time;
     
-- one shared latest-frame buffer;
+- three bounded latest-frame buffers;
     
-- one inference pipeline.
+- one scheduler coordinating three independent inference lanes.
     
 
 Do not start several backend worker processes that each attempt to initialize the complete camera and model pipeline.
@@ -2315,6 +2437,8 @@ Shared mutable runtime state must be protected.
 The following require safe synchronization:
 
 - latest raw frame;
+
+- synchronized tick and scheduler slot state;
     
 - latest annotated frame;
     
@@ -2357,20 +2481,26 @@ Minimum runtime metrics:
 
 ```text
 capture_fps
-inference_fps
-last_inference_ms
-average_inference_ms
+inference_fps_by_camera
+last_inference_ms_by_model
+average_inference_ms_by_model
 frames_captured
 frames_inferred
 frames_skipped
+scheduled_slots_by_camera
+missed_slots_by_camera
+last_inference_tick_by_camera
+inference_result_age_ms_by_camera
 confirmed_detection_count
 latest_frame_timestamp
-camera_read_failures
+camera_read_failures_by_camera
 ```
 
 Use a rolling or bounded measurement approach.
 
 Do not retain unlimited latency samples in memory.
+
+Intentional non-selected frames must be counted separately from error-driven drops or missed scheduler slots. Dashboard latency must distinguish engine execution latency from end-to-end inference-result age. A low engine execution time does not imply that every captured frame was inferred.
 
 ---
 
@@ -2434,7 +2564,7 @@ connection restored?
 publish camera.online
 ```
 
-Temporary camera failure must not terminate the entire API application.
+Temporary failure of one camera must not terminate the API application or stop capture on the other cameras. The failed camera's scheduled inference slots must be recorded as missed and skipped until it recovers; its engine must not be fed a frame from another camera.
 
 Windows OpenCV/MSMF read failures, including `OnReadSample` or `can't grab
 frame` logs after the camera reports opened, must follow this same path. They
@@ -2445,18 +2575,18 @@ should be surfaced as camera degraded/offline status and diagnosed with
 
 ## 32.2 Model Load Failure
 
-If the model cannot load:
+If any of the three required TensorRT engines cannot load:
 
 - application readiness must be false;
     
 - error must be logged clearly;
     
-- inference worker must not start;
+- the round-robin inference scheduler must not start;
     
-- health information must identify model failure.
+- health information must identify the failed engine and assigned camera.
     
 
-The application must not silently continue while pretending that inference is operational.
+The application must not silently fall back to a `.pt` model or continue while pretending that the complete three-model inference schedule is operational.
 
 ---
 
@@ -2532,15 +2662,16 @@ Required smoke checks:
 [ ] Python application imports successfully
 [ ] configuration loads
 [ ] database initializes
-[ ] `model_weight.pt` source model is accessible
-[ ] TensorRT export script can validate export prerequisites
-[ ] `model_weight.engine` is accessible on TensorRT deployments
-[ ] TensorRT engine loads on compatible NVIDIA deployments
-[ ] auto runtime falls back to `.pt` when TensorRT is unavailable
-[ ] inference executes on the configured runtime
-[ ] camera source opens
-[ ] frame can be captured
-[ ] inference can run on one frame
+[ ] all three `.pt` source models are accessible for export
+[ ] TensorRT export script can validate export prerequisites for each model
+[ ] `model_1.engine`, `model_2.engine`, and `model_3.engine` are accessible
+[ ] all three TensorRT engines load on the target NVIDIA deployment
+[ ] runtime fails clearly rather than falling back when any engine cannot load
+[ ] all three camera sources open
+[ ] frames can be captured and synchronized from all three cameras
+[ ] each engine can run on a known frame from its assigned camera
+[ ] the six-tick round-robin pattern matches `1, 2, 3, 1, 2, 3`
+[ ] instrumentation proves there are no overlapping engine calls
 [ ] inference result can be normalized
 [ ] annotated frame can be produced
 [ ] health endpoint responds
@@ -2735,13 +2866,13 @@ camera diagnostic script
 Validation:
 
 ```text
-camera opens
-frames arrive
-sequence IDs increase
-timestamps exist
-buffer exposes latest frame
-camera releases cleanly
-test video source works
+all three cameras open
+frames arrive independently from all cameras
+per-camera sequence IDs increase
+synchronized ticks and timestamps exist
+each buffer exposes only its camera's latest frame
+all cameras release cleanly
+three test video sources work together
 ```
 
 Then run all smoke and regression tests.
@@ -2756,12 +2887,12 @@ Implement:
 ModelAdapter
 model loader
 TensorRT export script
-`model_weight.pt` source-model handling
-`model_weight.engine` generation
+three `.pt` source-model artifacts
+`model_1.engine`, `model_2.engine`, and `model_3.engine` generation
 TensorRT runtime adapter
-Ultralytics `.pt` fallback adapter
+three strict TensorRT adapter instances
 NVIDIA GPU inference configuration
-one-frame runtime inference
+one-frame inference for each engine/camera assignment
 normalized detections
 model diagnostic script
 ```
@@ -2769,13 +2900,13 @@ model diagnostic script
 Validation:
 
 ```text
-`model_weight.pt` is accessible
-TensorRT export completes successfully
-`model_weight.engine` is created
-TensorRT engine loads successfully
+all three source models are accessible
+TensorRT export completes successfully for every model
+all three engine files are created
+all three TensorRT engines load successfully
 inference runs on the configured NVIDIA GPU where available
-auto runtime falls back to `.pt` on non-CUDA hosts
-engine processes known frame
+startup fails visibly if any required engine is unavailable
+each engine processes a known frame from its assigned camera
 detections normalize correctly
 empty detections are handled
 device configuration behaves correctly
@@ -2792,9 +2923,9 @@ Then run all smoke and regression tests.
 Implement:
 
 ```text
-camera worker
-latest-frame buffer
-inference worker
+three camera workers
+three latest-frame buffers
+round-robin inference scheduler
 post-processing
 performance timing
 ```
@@ -2802,8 +2933,11 @@ performance timing
 Validation:
 
 ```text
-capture continues independently
-inference processes new frames
+capture continues independently on all three cameras
+each camera is inferred once every three synchronized ticks
+only one engine executes at a time
+camera-to-model assignments remain fixed
+missed slots advance without stale-frame reuse or unbounded waiting
 stale frame queue does not grow
 workers stop cleanly
 exceptions do not silently kill worker
@@ -2820,15 +2954,15 @@ Implement:
 
 ```text
 renderer
-latest annotated frame store
+three latest annotated frame stores
 JPEG encoding
-HTTP video stream
+three camera-specific HTTP video streams
 ```
 
 Validation:
 
 ```text
-browser receives stream
+browser receives all three independent streams
 boxes appear
 labels appear
 confidence appears
@@ -3042,13 +3176,15 @@ The prototype is accepted when all of the following are true.
 ## Camera and Inference
 
 ```text
-[ ] one camera can be opened
-[ ] frames are continuously captured
-[ ] supplied `model_weight.pt` is available
-[ ] `model_weight.pt` can be exported to `model_weight.engine` on CUDA/TensorRT hosts
-[ ] TensorRT engine loads successfully on compatible NVIDIA deployments
-[ ] auto runtime can fall back to `.pt` on machines without CUDA/TensorRT
-[ ] real-time inference runs on the configured runtime
+[ ] all three cameras can be opened
+[ ] frames are continuously and independently captured from all cameras
+[ ] all three supplied source models are available
+[ ] each source model can be exported to its corresponding TensorRT engine
+[ ] all three TensorRT engines load successfully on the target NVIDIA deployment
+[ ] deployment runtime is engine-only and reports any missing engine clearly
+[ ] inference follows the synchronized repeating camera order `1, 2, 3`
+[ ] only one model executes at any instant
+[ ] each camera receives inference once every three synchronized frame ticks
 [ ] detections are normalized
 [ ] annotated frames are generated
 ```
@@ -3057,8 +3193,8 @@ The prototype is accepted when all of the following are true.
 
 ```text
 [ ] browser dashboard loads
-[ ] live annotated feed is visible
-[ ] camera status is visible
+[ ] three separate live annotated feeds are visible without stitching
+[ ] all three camera statuses and model assignments are visible
 [ ] inference status is visible
 [ ] basic performance measurements are visible
 ```
@@ -3107,7 +3243,7 @@ Do not redesign the architecture without an explicit specification change.
 
 ### Rule 2
 
-Do not introduce multiple-camera support during the prototype stage.
+Implement exactly three camera lanes and the specified round-robin inference schedule. Do not add stitching, multi-view fusion, cross-camera tracking, or concurrent engine execution.
 
 ### Rule 3
 
@@ -3179,7 +3315,7 @@ Update documentation when an API contract, configuration parameter, data model, 
 
 ### Rule 16
 
-Treat `model_weight.pt` as the supplied source model artifact. Export and validate `model_weight.engine` for optimized NVIDIA GPU deployments. Default runtime mode is `auto`, which attempts TensorRT first and falls back to the `.pt` model on `MODEL_FALLBACK_DEVICE` when CUDA/TensorRT is unavailable. Strict TensorRT deployments must set `MODEL_RUNTIME=tensorrt` and fail clearly if the engine cannot run.
+Treat the three `.pt` files as distinct source artifacts. Export and validate `model_1.engine`, `model_2.engine`, and `model_3.engine` on the target NVIDIA GPU. Deployment must use strict TensorRT mode, preserve the fixed camera-to-engine mapping, and fail clearly if any engine cannot run.
 
 ---
 
@@ -3188,19 +3324,36 @@ Treat `model_weight.pt` as the supplied source model artifact. Export and valida
 The approved architecture for implementation is:
 
 ```text
-Physical Camera
+Camera 1 --> LatestFrameBuffer 1 --> ModelAdapter 1 (`model_1.engine`) --\
+Camera 2 --> LatestFrameBuffer 2 --> ModelAdapter 2 (`model_2.engine`) ----> independent results
+Camera 3 --> LatestFrameBuffer 3 --> ModelAdapter 3 (`model_3.engine`) --/
+                   ^                         ^
+                   |                         |
+       synchronized frame ticks    RoundRobinInferenceScheduler
+                                   slots: 1 --> 2 --> 3 --> repeat
+                                   maximum concurrent inference calls: 1
+
+Independent results --> per-camera post-processing and temporal validation
+                    --> per-camera annotated streams (no stitching)
+                    --> camera/model-attributed alerts, evidence, and history
+```
+
+The following linear view represents the downstream processing path for the camera/model lane selected in the current scheduler slot:
+
+```text
+Selected Physical Camera (1 of 3)
        │
        ▼
-OpenCV CameraManager
+Assigned OpenCV CameraManager
        │
        ▼
-LatestFrameBuffer
+Assigned LatestFrameBuffer
        │
        ▼
-InferenceEngine
+RoundRobinInferenceScheduler
        │
        ▼
-ModelAdapter
+Assigned TensorRT ModelAdapter
        │
        ▼
 PostProcessor
@@ -3227,7 +3380,7 @@ AlertManager
                                   │
                     ┌─────────────┼─────────────┐
                     ▼             ▼             ▼
-                Live Feed     Active Alert    History
+                Live Feeds    Active Alert    History
                                   │
                                   ▼
                              Acknowledge
@@ -3239,4 +3392,4 @@ AlertManager
                                SQLite
 ```
 
-This architecture is the implementation baseline for the single-camera FOD detection prototype.
+This architecture is the implementation baseline for the three-camera, three-model, serialized round-robin FOD detection prototype.

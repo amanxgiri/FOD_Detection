@@ -63,3 +63,18 @@ def create_model_adapter(settings: Settings) -> ModelAdapter:
             class_ids=(settings.model_fod_class_id,),
         )
     raise ModelIntegrationError(f"unsupported model runtime: {settings.model_runtime}")
+
+
+def create_model_adapters(settings: Settings) -> dict[str, ModelAdapter]:
+    """Create the three strict TensorRT adapters used by the live runtime."""
+    return {
+        camera_id: TensorRTModelAdapter(
+            engine_path=engine_path,
+            device=settings.model_device,
+            image_size=settings.model_image_size,
+            confidence_threshold=settings.model_confidence_threshold,
+            iou_threshold=settings.model_iou_threshold,
+            class_ids=(settings.model_fod_class_id,),
+        )
+        for camera_id, engine_path in settings.model_engine_paths.items()
+    }

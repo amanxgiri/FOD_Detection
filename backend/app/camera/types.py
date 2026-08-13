@@ -23,3 +23,4 @@ class FramePacket:
     sequence_id: int
     captured_at: datetime
     frame: FrameArray
+    camera_id: str = "camera_1"

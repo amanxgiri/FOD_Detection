@@ -1,18 +1,25 @@
 import { MonitorPlay, RefreshCw, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { STREAM_URL } from "../services/api";
+import { cameraStreamUrl } from "../services/api";
 
 interface LiveCameraProps {
   backendOnline: boolean;
+  cameraId: string;
+  modelId: string;
   cameraStatus: string | undefined;
 }
 
-export function LiveCamera({ backendOnline, cameraStatus }: LiveCameraProps) {
+export function LiveCamera({
+  backendOnline,
+  cameraId,
+  modelId,
+  cameraStatus
+}: LiveCameraProps) {
   const [streamFailed, setStreamFailed] = useState(false);
   const cameraStreaming =
     cameraStatus === "online" || cameraStatus === "opening" || cameraStatus === "degraded";
-  const streamSrc = `${STREAM_URL}?camera=${cameraStatus ?? "unknown"}&t=${
+  const streamSrc = `${cameraStreamUrl(cameraId)}?camera=${cameraStatus ?? "unknown"}&t=${
     backendOnline ? "online" : "offline"
   }`;
   const showStream = backendOnline && cameraStreaming && !streamFailed;
@@ -31,17 +38,17 @@ export function LiveCamera({ backendOnline, cameraStatus }: LiveCameraProps) {
   }, [backendOnline, cameraStatus]);
 
   return (
-    <section className="video-surface" aria-label="Live camera feed">
+    <section className="video-surface" aria-label={`${cameraId} live camera feed`}>
       {showStream ? (
         <>
           <img
             className="video-frame"
             src={streamSrc}
-            alt="Live annotated FOD camera stream"
+            alt={`${cameraId} live annotated FOD stream`}
             onError={() => setStreamFailed(true)}
           />
           <div className="video-badge">
-            <MonitorPlay size={16} /> Stream connected
+            <MonitorPlay size={16} /> {formatCameraName(cameraId)} · {modelId}
           </div>
         </>
       ) : (
@@ -55,4 +62,8 @@ export function LiveCamera({ backendOnline, cameraStatus }: LiveCameraProps) {
       )}
     </section>
   );
+}
+
+function formatCameraName(cameraId: string) {
+  return cameraId.replace("_", " ").replace(/^./, (value) => value.toUpperCase());
 }

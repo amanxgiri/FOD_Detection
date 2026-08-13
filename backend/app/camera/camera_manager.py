@@ -37,12 +37,14 @@ class CameraManager:
         self,
         source: int | str,
         frame_buffer: LatestFrameBuffer,
+        camera_id: str = "camera_1",
         reconnect_delay_seconds: float = 2.0,
         capture_factory: CaptureFactory | None = None,
         performance_monitor: PerformanceMonitor | None = None,
         status_callback: StatusCallback | None = None,
     ) -> None:
         self._source = self._normalize_source(source)
+        self.camera_id = camera_id
         self._frame_buffer = frame_buffer
         self._reconnect_delay_seconds = reconnect_delay_seconds
         self._capture_factory = capture_factory or cv2.VideoCapture
@@ -65,7 +67,7 @@ class CameraManager:
             self._set_status(CameraStatus.OPENING)
             self._thread = threading.Thread(
                 target=self._capture_loop,
-                name="camera-capture",
+                name=f"camera-capture-{self.camera_id}",
                 daemon=True,
             )
             self._thread.start()
@@ -153,6 +155,7 @@ class CameraManager:
             sequence_id=sequence_id,
             captured_at=datetime.now(UTC),
             frame=frame.copy(),
+            camera_id=self.camera_id,
         )
         self._frame_buffer.publish(packet)
         if self._performance_monitor is not None:
@@ -190,4 +193,6 @@ class CameraManager:
         stripped = source.strip()
         if stripped.isdigit():
             return int(stripped)
+        if "://" in stripped or stripped.startswith("/dev/"):
+            return stripped
         return str(Path(stripped))

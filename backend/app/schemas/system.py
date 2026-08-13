@@ -11,8 +11,13 @@ class HealthResponse(BaseModel):
 
 class SystemStatusResponse(BaseModel):
     camera_status: str
+    camera_statuses: dict[str, str]
     model_status: str
+    model_statuses: dict[str, str]
     inference_status: str
+    active_camera_id: str | None = None
+    scheduler_slot_count: int = 0
+    scheduler_missed_slots: int = 0
     backend_status: str
     websocket_status: str
     capture_fps: float

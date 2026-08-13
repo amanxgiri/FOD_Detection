@@ -21,6 +21,7 @@ def build_system_status_response(request: Request) -> SystemStatusResponse:
     monitor = get_performance_monitor(request)
     snapshot = monitor.snapshot()
     runtime_statuses = runtime_statuses_from_app(request.app)
+    inference_engine = getattr(request.app.state, "inference_engine", None)
     latest_frame_age_ms = None
     if snapshot.latest_frame_timestamp is not None:
         latest_frame_age_ms = int(
@@ -29,8 +30,13 @@ def build_system_status_response(request: Request) -> SystemStatusResponse:
 
     return SystemStatusResponse(
         camera_status=runtime_statuses.camera_status,
+        camera_statuses=runtime_statuses.camera_statuses,
         model_status=runtime_statuses.model_status,
+        model_statuses=runtime_statuses.model_statuses,
         inference_status=runtime_statuses.inference_status,
+        active_camera_id=getattr(inference_engine, "active_camera_id", None),
+        scheduler_slot_count=getattr(inference_engine, "slot_count", 0),
+        scheduler_missed_slots=getattr(inference_engine, "missed_slots", 0),
         backend_status="online",
         websocket_status=websocket_status_from_connection_count(
             getattr(getattr(request.app.state, "websocket_manager", None), "connection_count", 0)
