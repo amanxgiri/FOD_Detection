@@ -4,6 +4,8 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.camera.opencv_capture import DEFAULT_FFMPEG_CAPTURE_OPTIONS
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -20,6 +22,11 @@ class Settings(BaseSettings):
     camera_2_source: str = "1"
     camera_3_source: str = "2"
     camera_reconnect_delay_seconds: float = 2.0
+    camera_ffmpeg_capture_options: str = DEFAULT_FFMPEG_CAPTURE_OPTIONS
+    camera_capture_open_timeout_ms: int = Field(default=5_000, gt=0)
+    camera_capture_read_timeout_ms: int = Field(default=1_000, gt=0)
+    camera_capture_buffer_size: int = Field(default=1, gt=0)
+    camera_capture_decoder_threads: int = Field(default=1, gt=0)
 
     model_source_path: Path = Path("backend/models/weights/model_weight.pt")
     model_engine_path: Path = Path("backend/models/weights/model_weight.engine")

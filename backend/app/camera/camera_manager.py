@@ -7,9 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-import cv2
-
 from app.camera.frame_buffer import LatestFrameBuffer
+from app.camera.opencv_capture import create_opencv_capture
 from app.camera.types import CameraStatus, FramePacket
 from app.core.logging import get_logger
 from app.monitoring.performance_monitor import PerformanceMonitor
@@ -40,6 +39,10 @@ class CameraManager:
         camera_id: str = "camera_1",
         reconnect_delay_seconds: float = 2.0,
         capture_factory: CaptureFactory | None = None,
+        capture_open_timeout_ms: int = 5_000,
+        capture_read_timeout_ms: int = 1_000,
+        capture_buffer_size: int = 1,
+        capture_decoder_threads: int = 1,
         performance_monitor: PerformanceMonitor | None = None,
         status_callback: StatusCallback | None = None,
     ) -> None:
@@ -47,7 +50,15 @@ class CameraManager:
         self.camera_id = camera_id
         self._frame_buffer = frame_buffer
         self._reconnect_delay_seconds = reconnect_delay_seconds
-        self._capture_factory = capture_factory or cv2.VideoCapture
+        self._capture_factory = capture_factory or (
+            lambda source: create_opencv_capture(
+                source,
+                open_timeout_ms=capture_open_timeout_ms,
+                read_timeout_ms=capture_read_timeout_ms,
+                buffer_size=capture_buffer_size,
+                decoder_threads=capture_decoder_threads,
+            )
+        )
         self._performance_monitor = performance_monitor
         self._status_callback = status_callback
 

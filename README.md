@@ -127,6 +127,20 @@ CAMERA_2_SOURCE=rtsp://viewer:password@192.168.1.22:8554/camera
 CAMERA_3_SOURCE=rtsp://viewer:password@192.168.1.23:8554/camera
 ```
 
+The backend explicitly selects OpenCV's FFmpeg backend for RTSP and defaults to
+UDP, zero analysis duration, minimal probing, disabled demux buffering and frame
+reordering, bounded open/read timeouts, and a best-effort one-frame decoder
+buffer. Override these capture-boundary settings only after glass-to-glass
+measurement:
+
+```env
+CAMERA_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;udp|probesize;32|analyzeduration;0|fflags;nobuffer|flags;low_delay|reorder_queue_size;0
+CAMERA_CAPTURE_OPEN_TIMEOUT_MS=5000
+CAMERA_CAPTURE_READ_TIMEOUT_MS=1000
+CAMERA_CAPTURE_BUFFER_SIZE=1
+CAMERA_CAPTURE_DECODER_THREADS=1
+```
+
 Replace the sample addresses, `/camera` path, port, and credentials with the
 actual Pi configuration. Percent-encode special characters in usernames and
 passwords. Real credentials belong only in the ignored `.env`, never in
@@ -154,16 +168,15 @@ transport that the application will use:
 
 ```bash
 source .venv/bin/activate
-export OPENCV_FFMPEG_CAPTURE_OPTIONS='rtsp_transport;udp'
 export OPENCV_VIDEOIO_DEBUG=1
 python scripts/check_camera.py --source 'rtsp://viewer:password@192.168.1.21:8554/camera' --timeout 10
 python scripts/check_camera.py --source 'rtsp://viewer:password@192.168.1.22:8554/camera' --timeout 10
 python scripts/check_camera.py --source 'rtsp://viewer:password@192.168.1.23:8554/camera' --timeout 10
 ```
 
-`OPENCV_FFMPEG_CAPTURE_OPTIONS` is a process environment variable; exporting it
-in the shell ensures OpenCV sees it. `OPENCV_VIDEOIO_DEBUG=1` makes the selected
-capture backend visible in logs. Confirm that it reports FFmpeg. FFmpeg documents
+The backend supplies `OPENCV_FFMPEG_CAPTURE_OPTIONS` from the camera settings
+before opening the streams. `OPENCV_VIDEOIO_DEBUG=1` makes the selected capture
+backend visible in logs. Confirm that it reports FFmpeg. FFmpeg documents
 the RTSP URL and UDP lower-transport behavior in its
 [RTSP protocol documentation](https://ffmpeg.org/ffmpeg-protocols.html#rtsp).
 
@@ -212,7 +225,6 @@ process and may restart during engine generation or while cameras are open:
 
 ```bash
 source .venv/bin/activate
-export OPENCV_FFMPEG_CAPTURE_OPTIONS='rtsp_transport;udp'
 export OPENCV_VIDEOIO_DEBUG=1
 python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
 ```

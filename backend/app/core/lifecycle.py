@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import FastAPI
 
 from app.camera import CameraManager, LatestFrameBuffer
+from app.camera.opencv_capture import configure_ffmpeg_capture_options
 from app.camera.types import CameraStatus
 from app.core.logging import get_logger
 from app.detection.temporal_validator import TemporalValidationConfig, TemporalValidator
@@ -46,6 +47,9 @@ class RuntimeController:
         self._performance_monitor = app.state.performance_monitor
         self._capture_factory = getattr(app.state, "capture_factory", None)
         self._model_adapter_factory = model_adapter_factory or create_model_adapters
+        configure_ffmpeg_capture_options(
+            self._settings.camera_ffmpeg_capture_options
+        )
 
         self._lock = threading.RLock()
         self._frame_buffers = {
@@ -209,6 +213,10 @@ class RuntimeController:
                 frame_buffer=self._frame_buffers[camera_id],
                 reconnect_delay_seconds=self._settings.camera_reconnect_delay_seconds,
                 capture_factory=self._capture_factory,
+                capture_open_timeout_ms=self._settings.camera_capture_open_timeout_ms,
+                capture_read_timeout_ms=self._settings.camera_capture_read_timeout_ms,
+                capture_buffer_size=self._settings.camera_capture_buffer_size,
+                capture_decoder_threads=self._settings.camera_capture_decoder_threads,
                 performance_monitor=self._performance_monitor,
             )
             for camera_id, source in self._settings.camera_sources.items()

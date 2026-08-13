@@ -730,7 +730,7 @@ At minimum, the following settings should be externalized:
 | Category | Examples |
 |---|---|
 | Camera network | Router interface/subnet, S1/S2/S3 stable IP mapping, connectivity timeout, and optional health-check interval. |
-| RTSP streams | Three RTSP URLs, port and path, secret-backed credentials, forced UDP transport, decode timeout, reconnect delay, enabled state, and display name. |
+| RTSP streams | Three RTSP URLs, port and path, secret-backed credentials, explicit OpenCV FFmpeg backend, forced UDP transport, low-latency demux/decode options, one-frame backend-buffer request, one decoder thread per feed, open/read timeouts, reconnect delay, enabled state, and display name. |
 | Models | Source weight path, engine path, runtime, device, image size, per-model confidence and IoU threshold. |
 | Scheduler | Fixed pair order P1/P2/P3, `maximum_in_flight_inference=1`, non-blocking latest-frame snapshots, idle-cycle backoff, token handover, skipped-frame accounting, and degraded-pair policy. Batching, queued-frame draining, and concurrent prediction are disabled. |
 | Validation | Enabled state, window size, required hits, matching IoU, candidate expiry. |
