@@ -22,6 +22,14 @@ export function PerformanceMetrics({ status }: PerformanceMetricsProps) {
           <dd>{formatMetric(status?.average_inference_ms, "ms")}</dd>
         </div>
         <div>
+          <dt>Capture → host</dt>
+          <dd>{formatNullableMetric(status?.capture_to_host_ms, "ms")}</dd>
+        </div>
+        <div>
+          <dt>Avg capture → host</dt>
+          <dd>{formatNullableMetric(status?.average_capture_to_host_ms, "ms")}</dd>
+        </div>
+        <div>
           <dt>Latest frame age</dt>
           <dd>{formatNullableMetric(status?.latest_frame_age_ms, "ms")}</dd>
         </div>

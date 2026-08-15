@@ -24,3 +24,6 @@ class FramePacket:
     captured_at: datetime
     frame: FrameArray
     camera_id: str = "camera_1"
+    source_captured_at: datetime | None = None
+    source_sequence_id: int | None = None
+    capture_to_host_ms: float | None = None

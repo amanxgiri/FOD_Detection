@@ -45,6 +45,17 @@ def build_system_status_response(request: Request) -> SystemStatusResponse:
         inference_fps=round(snapshot.inference_fps, 2),
         average_inference_ms=round(snapshot.average_inference_ms, 2),
         latest_frame_age_ms=latest_frame_age_ms,
+        capture_to_host_ms=(
+            round(snapshot.latest_capture_to_host_ms, 2)
+            if snapshot.latest_capture_to_host_ms is not None
+            else None
+        ),
+        average_capture_to_host_ms=(
+            round(snapshot.average_capture_to_host_ms, 2)
+            if snapshot.average_capture_to_host_ms is not None
+            else None
+        ),
+        source_timestamp_frames=snapshot.source_timestamp_frames,
         total_confirmed_detections=snapshot.confirmed_detection_count,
     )
 

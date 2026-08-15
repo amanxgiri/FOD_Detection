@@ -9,6 +9,7 @@ from typing import Any, Protocol
 
 from app.camera.frame_buffer import LatestFrameBuffer
 from app.camera.opencv_capture import create_opencv_capture
+from app.camera.source_timestamp import decode_source_timestamp
 from app.camera.types import CameraStatus, FramePacket
 from app.core.logging import get_logger
 from app.monitoring.performance_monitor import PerformanceMonitor
@@ -162,15 +163,35 @@ class CameraManager:
             self._sequence_id += 1
             sequence_id = self._sequence_id
         self._set_status(CameraStatus.ONLINE)
+        host_captured_at = datetime.now(UTC)
+        source_timestamp = decode_source_timestamp(frame)
+        if source_timestamp is not None and source_timestamp.camera_id != self.camera_id:
+            logger.warning("source timestamp camera ID does not match configured camera")
+            source_timestamp = None
+        capture_to_host_ms = (
+            (host_captured_at - source_timestamp.captured_at).total_seconds() * 1000
+            if source_timestamp is not None
+            else None
+        )
         packet = FramePacket(
             sequence_id=sequence_id,
-            captured_at=datetime.now(UTC),
+            captured_at=host_captured_at,
             frame=frame.copy(),
             camera_id=self.camera_id,
+            source_captured_at=(
+                source_timestamp.captured_at if source_timestamp is not None else None
+            ),
+            source_sequence_id=(
+                source_timestamp.sequence_id if source_timestamp is not None else None
+            ),
+            capture_to_host_ms=capture_to_host_ms,
         )
         self._frame_buffer.publish(packet)
         if self._performance_monitor is not None:
-            self._performance_monitor.record_capture(packet.captured_at)
+            self._performance_monitor.record_capture(
+                packet.captured_at,
+                capture_to_host_ms=packet.capture_to_host_ms,
+            )
         return packet
 
     def _record_read_failure(self) -> None:

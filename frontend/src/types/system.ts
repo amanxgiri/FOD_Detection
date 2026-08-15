@@ -13,6 +13,9 @@ export interface SystemStatusResponse {
   inference_fps: number;
   average_inference_ms: number;
   latest_frame_age_ms: number | null;
+  capture_to_host_ms: number | null;
+  average_capture_to_host_ms: number | null;
+  source_timestamp_frames: number;
   total_confirmed_detections: number;
 }
 

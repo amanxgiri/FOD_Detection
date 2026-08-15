@@ -133,6 +133,7 @@ class InferenceEngine:
                         sequence_id=packet.sequence_id,
                         captured_at=packet.captured_at,
                         frame=annotated,
+                        source_captured_at=packet.source_captured_at,
                     )
                 )
             with self._lock:

@@ -361,6 +361,7 @@ def _publish_camera_frames(
                 sequence_id=packet.sequence_id,
                 captured_at=packet.captured_at,
                 frame=renderer.render(packet.frame, detections=[]),
+                source_captured_at=packet.source_captured_at,
             )
         )
         last_sequence_id = packet.sequence_id

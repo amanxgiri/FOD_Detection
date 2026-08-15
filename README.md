@@ -122,9 +122,9 @@ cp .env.example .env
 Set the complete, independently readable RTSP URLs in `.env`:
 
 ```env
-CAMERA_1_SOURCE=rtsp://viewer:password@192.168.1.21:8554/camera
-CAMERA_2_SOURCE=rtsp://viewer:password@192.168.1.22:8554/camera
-CAMERA_3_SOURCE=rtsp://viewer:password@192.168.1.23:8554/camera
+CAMERA_1_SOURCE=rtsp://192.168.1.100:8554/cam1
+CAMERA_2_SOURCE=rtsp://192.168.1.100:8554/cam2
+CAMERA_3_SOURCE=rtsp://192.168.1.100:8554/cam3
 ```
 
 The backend explicitly selects OpenCV's FFmpeg backend for RTSP and defaults to
@@ -289,9 +289,9 @@ Copy-Item .env.example .env
 Configure these required camera and engine values:
 
 ```env
-CAMERA_1_SOURCE=rtsp://viewer:password@192.168.1.21:8554/camera
-CAMERA_2_SOURCE=rtsp://viewer:password@192.168.1.22:8554/camera
-CAMERA_3_SOURCE=rtsp://viewer:password@192.168.1.23:8554/camera
+CAMERA_1_SOURCE=rtsp://192.168.1.100:8554/cam1
+CAMERA_2_SOURCE=rtsp://192.168.1.100:8554/cam2
+CAMERA_3_SOURCE=rtsp://192.168.1.100:8554/cam3
 
 MODEL_1_ENGINE_PATH=backend/models/weights/model_1.engine
 MODEL_2_ENGINE_PATH=backend/models/weights/model_2.engine

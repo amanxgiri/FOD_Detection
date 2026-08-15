@@ -83,6 +83,7 @@ def iter_mjpeg_frames(
             frame.frame,
             jpeg_quality=jpeg_quality,
             captured_at=frame.captured_at,
+            source_captured_at=frame.source_captured_at,
         )
         emitted += 1
         if frame_limit is None:
@@ -93,17 +94,28 @@ def encode_multipart_frame(
     frame: FrameArray,
     jpeg_quality: int,
     captured_at: datetime | None = None,
+    source_captured_at: datetime | None = None,
 ) -> bytes:
     headers = ""
     frame_to_encode = frame
     if captured_at is not None:
         sent_at = datetime.now(UTC)
         age_ms = calculate_frame_age_ms(captured_at, sent_at)
-        frame_to_encode = annotate_frame_age(frame, age_ms)
+        source_age_ms = (
+            calculate_frame_age_ms(source_captured_at, sent_at)
+            if source_captured_at is not None
+            else None
+        )
+        frame_to_encode = annotate_frame_age(frame, age_ms, source_age_ms)
         headers = (
             f"X-Frame-Captured-At: {captured_at.isoformat()}\r\n"
             f"X-Host-Frame-Age-Ms: {age_ms:.1f}\r\n"
         )
+        if source_captured_at is not None and source_age_ms is not None:
+            headers += (
+                f"X-Source-Captured-At: {source_captured_at.isoformat()}\r\n"
+                f"X-Sensor-To-Stream-Age-Ms: {source_age_ms:.1f}\r\n"
+            )
     jpeg_bytes = encode_jpeg(frame_to_encode, jpeg_quality=jpeg_quality)
     return (
         f"--{BOUNDARY}\r\n"
@@ -122,10 +134,16 @@ def calculate_frame_age_ms(captured_at: datetime, sent_at: datetime) -> float:
     return max(0.0, (sent_at - captured_at).total_seconds() * 1000)
 
 
-def annotate_frame_age(frame: FrameArray, age_ms: float) -> FrameArray:
+def annotate_frame_age(
+    frame: FrameArray,
+    age_ms: float,
+    source_age_ms: float | None = None,
+) -> FrameArray:
     annotated = frame.copy()
     height, width = annotated.shape[:2]
     label = f"Host frame age at send: {age_ms:.0f} ms"
+    if source_age_ms is not None:
+        label = f"Sensor -> stream: {source_age_ms:.0f} ms | {label}"
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = max(0.35, min(0.7, width / 900))
     thickness = 1 if font_scale < 0.6 else 2

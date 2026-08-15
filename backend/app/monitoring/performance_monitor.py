@@ -19,6 +19,9 @@ class PerformanceSnapshot:
     confirmed_detection_count: int
     latest_frame_timestamp: datetime | None
     camera_read_failures: int
+    latest_capture_to_host_ms: float | None
+    average_capture_to_host_ms: float | None
+    source_timestamp_frames: int
 
 
 class PerformanceMonitor:
@@ -35,12 +38,21 @@ class PerformanceMonitor:
         self._confirmed_detection_count = 0
         self._latest_frame_timestamp: datetime | None = None
         self._camera_read_failures = 0
+        self._capture_to_host_latencies_ms: deque[float] = deque(maxlen=window_size)
+        self._source_timestamp_frames = 0
 
-    def record_capture(self, captured_at: datetime) -> None:
+    def record_capture(
+        self,
+        captured_at: datetime,
+        capture_to_host_ms: float | None = None,
+    ) -> None:
         with self._lock:
             self._frames_captured += 1
             self._latest_frame_timestamp = captured_at
             self._capture_times.append(monotonic())
+            if capture_to_host_ms is not None:
+                self._capture_to_host_latencies_ms.append(capture_to_host_ms)
+                self._source_timestamp_frames += 1
 
     def record_inference(self, latency_ms: float, skipped_frames: int = 0) -> None:
         with self._lock:
@@ -69,6 +81,17 @@ class PerformanceMonitor:
                 if self._inference_latencies_ms
                 else 0.0
             )
+            latest_capture_to_host_ms = (
+                self._capture_to_host_latencies_ms[-1]
+                if self._capture_to_host_latencies_ms
+                else None
+            )
+            average_capture_to_host_ms = (
+                sum(self._capture_to_host_latencies_ms)
+                / len(self._capture_to_host_latencies_ms)
+                if self._capture_to_host_latencies_ms
+                else None
+            )
             return PerformanceSnapshot(
                 capture_fps=self._calculate_fps(self._capture_times),
                 inference_fps=self._calculate_fps(self._inference_times),
@@ -80,6 +103,9 @@ class PerformanceMonitor:
                 confirmed_detection_count=self._confirmed_detection_count,
                 latest_frame_timestamp=self._latest_frame_timestamp,
                 camera_read_failures=self._camera_read_failures,
+                latest_capture_to_host_ms=latest_capture_to_host_ms,
+                average_capture_to_host_ms=average_capture_to_host_ms,
+                source_timestamp_frames=self._source_timestamp_frames,
             )
 
     @staticmethod

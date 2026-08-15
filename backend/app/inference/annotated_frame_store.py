@@ -12,6 +12,7 @@ class AnnotatedFrame:
     sequence_id: int
     captured_at: datetime
     frame: FrameArray
+    source_captured_at: datetime | None = None
 
 
 class LatestAnnotatedFrameStore:

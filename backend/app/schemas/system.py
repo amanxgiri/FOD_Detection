@@ -24,4 +24,7 @@ class SystemStatusResponse(BaseModel):
     inference_fps: float
     average_inference_ms: float
     latest_frame_age_ms: int | None
+    capture_to_host_ms: float | None
+    average_capture_to_host_ms: float | None
+    source_timestamp_frames: int
     total_confirmed_detections: int

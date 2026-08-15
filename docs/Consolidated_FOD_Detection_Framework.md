@@ -881,3 +881,6 @@ The framework remains a prototype until its detection quality, end-to-end latenc
 | **RTSP** | Real-Time Streaming Protocol used to establish and control each camera streaming session. |
 | **RTP/RTCP over UDP** | Low-latency media and control transport used for the camera video packets after the RTSP session is established. |
 | **Router** | Network device connecting the three camera endpoints to the wired inference host; it routes feeds but does not combine or infer on them. |
+# Capture-delay measurement
+
+For the Pi-side sensor timestamp publisher, clock synchronization, execution commands, and frontend metrics, see [Pi Capture Delay Measurement](Pi_Capture_Delay_Measurement.md).
