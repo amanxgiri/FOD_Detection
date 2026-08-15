@@ -17,7 +17,7 @@ from app.inference.model_adapter import ModelAdapter
 from app.inference.model_loader import create_model_adapters
 from app.inference.postprocessor import PostProcessor
 from app.inference.renderer import FrameRenderer
-from app.inference.round_robin_engine import RoundRobinInferenceEngine
+from app.inference.round_robin_engine import ParallelInferenceEngine, RoundRobinInferenceEngine
 
 logger = get_logger(__name__)
 CAMERA_IDS = ("camera_1", "camera_2", "camera_3")
@@ -67,7 +67,7 @@ class RuntimeController:
         self._bridge_threads: dict[str, threading.Thread] = {}
         self._camera_managers = self._create_camera_managers()
         self._model_adapters: dict[str, ModelAdapter] = {}
-        self._inference_engine: RoundRobinInferenceEngine | None = None
+        self._inference_engine: ParallelInferenceEngine | RoundRobinInferenceEngine | None = None
         self._model_statuses = {camera_id: "not_started" for camera_id in CAMERA_IDS}
         self._inference_status = "not_started"
 
@@ -82,7 +82,7 @@ class RuntimeController:
         return self._camera_managers
 
     @property
-    def inference_engine(self) -> RoundRobinInferenceEngine | None:
+    def inference_engine(self) -> ParallelInferenceEngine | RoundRobinInferenceEngine | None:
         return self._inference_engine
 
     @property
@@ -237,14 +237,14 @@ class RuntimeController:
     def _create_inference_engine(
         self,
         adapters: dict[str, ModelAdapter],
-    ) -> RoundRobinInferenceEngine:
+    ) -> ParallelInferenceEngine:
         validator_config = TemporalValidationConfig(
             enabled=self._settings.temporal_validation_enabled,
             window_size=self._settings.temporal_window_size,
             required_hits=self._settings.temporal_required_hits,
             match_iou=self._settings.temporal_match_iou,
         )
-        return RoundRobinInferenceEngine(
+        return ParallelInferenceEngine(
             frame_buffers=self._frame_buffers,
             model_adapters=adapters,
             annotated_frame_stores=self._annotated_frame_stores,

@@ -131,8 +131,6 @@ class RoundRobinInferenceEngine:
                 self._stop_event.wait(self._idle_backoff_seconds)
 
     def _run_slot(self, camera_id: str) -> bool:
-        # A turn is a non-blocking snapshot, never a dequeue operation. Frames
-        # overwritten before this instant are deliberately skipped forever.
         packet = self._frame_buffers[camera_id].get_latest()
         with self._lock:
             self._slot_count += 1
@@ -196,3 +194,169 @@ class RoundRobinInferenceEngine:
             with self._lock:
                 self._active_camera_id = None
         return True
+
+
+class ParallelInferenceEngine:
+    """Run one inference worker per camera concurrently on the same GPU."""
+
+    def __init__(
+        self,
+        frame_buffers: dict[str, LatestFrameBuffer],
+        model_adapters: dict[str, ModelAdapter],
+        annotated_frame_stores: dict[str, LatestAnnotatedFrameStore],
+        postprocessor: PostProcessor,
+        performance_monitor: PerformanceMonitor,
+        temporal_validators: dict[str, TemporalValidator],
+        frame_renderer: FrameRenderer | None = None,
+        idle_backoff_seconds: float = 0.001,
+    ) -> None:
+        camera_ids = tuple(frame_buffers)
+        if len(camera_ids) != 3:
+            raise ValueError("parallel inference requires exactly three cameras")
+        if set(model_adapters) != set(camera_ids):
+            raise ValueError("every camera must have exactly one model adapter")
+        if set(annotated_frame_stores) != set(camera_ids):
+            raise ValueError("every camera must have an annotated frame store")
+        if set(temporal_validators) != set(camera_ids):
+            raise ValueError("every camera must have an independent temporal validator")
+
+        self._camera_ids = camera_ids
+        self._frame_buffers = frame_buffers
+        self._model_adapters = model_adapters
+        self._annotated_frame_stores = annotated_frame_stores
+        self._postprocessor = postprocessor
+        self._performance_monitor = performance_monitor
+        self._temporal_validators = temporal_validators
+        self._frame_renderer = frame_renderer or FrameRenderer()
+        self._idle_backoff_seconds = max(0.0, idle_backoff_seconds)
+
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._threads: dict[str, threading.Thread] = {}
+        self._last_sequence_ids = {camera_id: 0 for camera_id in camera_ids}
+        self._latest_results: dict[str, CameraInferenceResult] = {}
+        self._last_error: str | None = None
+        self._active_camera_id: str | None = None
+        self._slot_count = 0
+        self._missed_slots = 0
+
+    def start(self) -> None:
+        with self._lock:
+            if any(thread.is_alive() for thread in self._threads.values()):
+                return
+            self._stop_event.clear()
+            for camera_id in self._camera_ids:
+                thread = threading.Thread(
+                    target=self._camera_worker,
+                    args=(camera_id,),
+                    name=f"parallel-inference-{camera_id}",
+                    daemon=True,
+                )
+                self._threads[camera_id] = thread
+                thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        for thread in self._threads.values():
+            thread.join(timeout=5)
+        with self._lock:
+            self._threads.clear()
+            self._active_camera_id = None
+
+    def is_running(self) -> bool:
+        return any(thread.is_alive() for thread in self._threads.values()) and not self._stop_event.is_set()
+
+    def get_status(self) -> str:
+        if self.is_running():
+            return "error" if self.get_last_error() else "running"
+        return "stopped"
+
+    def get_last_error(self) -> str | None:
+        with self._lock:
+            return self._last_error
+
+    def get_latest_result(self, camera_id: str) -> CameraInferenceResult | None:
+        with self._lock:
+            return self._latest_results.get(camera_id)
+
+    @property
+    def active_camera_id(self) -> str | None:
+        with self._lock:
+            return self._active_camera_id
+
+    @property
+    def slot_count(self) -> int:
+        with self._lock:
+            return self._slot_count
+
+    @property
+    def missed_slots(self) -> int:
+        with self._lock:
+            return self._missed_slots
+
+    def _camera_worker(self, camera_id: str) -> None:
+        while not self._stop_event.is_set():
+            packet = self._frame_buffers[camera_id].get_latest()
+            if packet is None:
+                self._stop_event.wait(self._idle_backoff_seconds)
+                continue
+            if packet.sequence_id <= self._last_sequence_ids[camera_id]:
+                with self._lock:
+                    self._missed_slots += 1
+                self._stop_event.wait(self._idle_backoff_seconds)
+                continue
+            try:
+                self._process_camera_packet(camera_id, packet)
+            except Exception as exc:
+                with self._lock:
+                    self._last_error = f"{camera_id}: {exc}"
+            self._stop_event.wait(self._idle_backoff_seconds)
+
+    def _process_camera_packet(self, camera_id: str, packet) -> None:
+        if packet.frame.size == 0 or packet.frame.ndim < 2:
+            raise ValueError(f"invalid frame from {camera_id}")
+        with self._lock:
+            self._slot_count += 1
+            self._active_camera_id = camera_id
+            self._last_sequence_ids[camera_id] = packet.sequence_id
+
+        skipped_frames = max(
+            0,
+            packet.sequence_id - self._last_sequence_ids[camera_id],
+        )
+        started = time.perf_counter()
+        raw_detections = self._model_adapters[camera_id].predict(packet.frame)
+        inference_ms = (time.perf_counter() - started) * 1000
+        frame_height, frame_width = packet.frame.shape[:2]
+        detections = self._postprocessor.process(
+            raw_detections,
+            frame_width=frame_width,
+            frame_height=frame_height,
+        )
+        confirmed = self._temporal_validators[camera_id].process(
+            detections,
+            sequence_id=packet.sequence_id,
+        )
+        annotated = self._frame_renderer.render(packet.frame, detections)
+        self._annotated_frame_stores[camera_id].publish(
+            AnnotatedFrame(
+                sequence_id=packet.sequence_id,
+                captured_at=packet.captured_at,
+                frame=annotated,
+            )
+        )
+        result = CameraInferenceResult(
+            camera_id=camera_id,
+            sequence_id=packet.sequence_id,
+            detections=detections,
+            confirmed_detections=confirmed,
+            inference_ms=inference_ms,
+        )
+        with self._lock:
+            self._latest_results[camera_id] = result
+            self._last_error = None
+            self._active_camera_id = None
+        self._performance_monitor.record_inference(
+            latency_ms=inference_ms,
+            skipped_frames=skipped_frames,
+        )
