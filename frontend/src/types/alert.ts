@@ -24,6 +24,10 @@ export type AlertEventType =
   | "fod.acknowledged"
   | "camera.offline"
   | "camera.online"
+  | "camera.discovered"
+  | "camera.removed"
+  | "camera.updated"
+  | "camera.model_updated"
   | "system.warning";
 
 export interface AlertEvent<TData = unknown> {

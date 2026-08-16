@@ -109,9 +109,8 @@ current Ubuntu, Debian, RHEL, and SLES releases; see the
 
 ### 3. Configure the Raspberry Pi RTSP/UDP streams
 
-Each Raspberry Pi must run an RTSP server or publisher. A static IP by itself is
-not a camera source: obtain the RTSP port, stream path, and credentials from the
-service running on each Pi. Keep the Ubuntu host and all three Pis on the same
+Each Raspberry Pi must run the RTSP publisher. A static IP by itself is not a
+camera source. Keep the Ubuntu host and all Pis on the same
 routed LAN or camera VLAN, preferably using router DHCP reservations and wired
 Ethernet. Do not expose the RTSP ports directly to the public internet.
 
@@ -119,13 +118,20 @@ Ethernet. Do not expose the RTSP ports directly to the public internet.
 cp .env.example .env
 ```
 
-Set the complete, independently readable RTSP URLs in `.env`:
+Configure the MediaMTX endpoints and discovery capacity in `.env`:
 
 ```env
-CAMERA_1_SOURCE=rtsp://192.168.1.100:8554/cam3
-CAMERA_2_SOURCE=rtsp://192.168.1.100:8554/cam4
-CAMERA_3_SOURCE=rtsp://192.168.1.100:8554/cam5
+CAMERA_MAX_COUNT=8
+CAMERA_DISCOVERY_INTERVAL_SECONDS=2
+MEDIAMTX_API_URL=http://127.0.0.1:9997
+MEDIAMTX_RTSP_URL=rtsp://127.0.0.1:8554
 ```
+
+Install a Pi publisher with `scripts/install_pi_timestamp_service.sh`. Its
+lowercase hostname is the default stable identity and RTSP path, for example
+`rtsp://192.168.1.100:8554/raspberrypi9`. The backend polls MediaMTX every two
+seconds, retains offline registrations, and exposes ready `.engine` files in
+the dashboard model selector.
 
 The backend explicitly selects OpenCV's FFmpeg backend for RTSP and defaults to
 UDP, zero analysis duration, minimal probing, disabled demux buffering and frame
@@ -286,12 +292,14 @@ Create the root `.env` from the supplied example:
 Copy-Item .env.example .env
 ```
 
-Configure these required camera and engine values:
+Configure the discovery and model catalog values:
 
 ```env
-CAMERA_1_SOURCE=rtsp://192.168.1.100:8554/cam3
-CAMERA_2_SOURCE=rtsp://192.168.1.100:8554/cam4
-CAMERA_3_SOURCE=rtsp://192.168.1.100:8554/cam5
+CAMERA_MAX_COUNT=8
+CAMERA_DISCOVERY_INTERVAL_SECONDS=2
+MEDIAMTX_API_URL=http://127.0.0.1:9997
+MEDIAMTX_RTSP_URL=rtsp://127.0.0.1:8554
+MODEL_CATALOG_DIRECTORY=backend/models/weights
 
 MODEL_1_ENGINE_PATH=backend/models/weights/model_1.engine
 MODEL_2_ENGINE_PATH=backend/models/weights/model_2.engine
@@ -306,14 +314,11 @@ MODEL_FOD_CLASS_ID=0
 INFERENCE_IDLE_BACKOFF_SECONDS=0.001
 ```
 
-A camera source may be an OpenCV camera index, video-file path, or supported
-stream URL. Keep each engine permanently assigned to the corresponding camera.
-
-The three capture threads continuously decode their independent streams and
-keep only the latest frame. The inference scheduler still executes one model at
-a time in the order camera 1, camera 2, camera 3. Each turn takes a non-blocking
-snapshot of that camera's latest frame; it never waits for or drains queued
-frames. This is scheduler ordering,
+Each discovered camera gets its own capture thread and latest-frame buffer.
+Unassigned cameras remain preview-only. The inference scheduler serializes the
+currently online, assigned lanes; the same ready engine may be shared by
+multiple lanes. Each turn takes a non-blocking snapshot of the latest frame and
+never drains queued frames. This is scheduler ordering,
 not exposure-level synchronization: exact cross-camera timing would require
 clock synchronization (NTP/PTP), source timestamps, and additional application
 logic.
@@ -332,8 +337,9 @@ When the backend starts, it checks each configured source/engine pair. If a
 `model_N.pt` file exists but its corresponding `model_N.engine` does not, the
 backend automatically exports that source to TensorRT before starting the camera
 runtime. Existing engines are left untouched. Missing source-and-engine pairs
-are not generated, but inference cannot start until all three required engines
-exist. An automatic export failure stops backend startup with the camera/model
+are not generated. Only ready `.engine` files appear in the selector, and
+inference can start when at least one online camera has an assigned engine.
+An automatic export failure stops backend startup with the camera/model
 pair included in the error.
 
 Automatic export can take several minutes on first startup and requires the

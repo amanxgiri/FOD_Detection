@@ -9,7 +9,7 @@ from typing import Any, Protocol
 
 from app.camera.frame_buffer import LatestFrameBuffer
 from app.camera.opencv_capture import create_opencv_capture
-from app.camera.source_timestamp import decode_source_timestamp
+from app.camera.source_timestamp import decode_source_timestamp, source_identity_matches
 from app.camera.types import CameraStatus, FramePacket
 from app.core.logging import get_logger
 from app.monitoring.performance_monitor import PerformanceMonitor
@@ -118,7 +118,12 @@ class CameraManager:
 
     def _capture_loop(self) -> None:
         while not self._stop_event.is_set():
-            capture = self._open_capture()
+            try:
+                capture = self._open_capture()
+            except RuntimeError:
+                if self._stop_event.is_set():
+                    break
+                raise
             with self._lock:
                 self._capture = capture
             self._set_status(CameraStatus.ONLINE)
@@ -165,7 +170,9 @@ class CameraManager:
         self._set_status(CameraStatus.ONLINE)
         host_captured_at = datetime.now(UTC)
         source_timestamp = decode_source_timestamp(frame)
-        if source_timestamp is not None and source_timestamp.camera_id != self.camera_id:
+        if source_timestamp is not None and not source_identity_matches(
+            self.camera_id, source_timestamp.camera_id
+        ):
             logger.warning("source timestamp camera ID does not match configured camera")
             source_timestamp = None
         capture_to_host_ms = (

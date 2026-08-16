@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CAMERA_ID=""
+CAMERA_ID="$(hostname | tr '[:upper:]' '[:lower:]')"
 PUBLISH_URL=""
+MEDIAMTX_HOST="192.168.1.100"
 WIDTH=1280
 HEIGHT=720
 FPS=30
@@ -17,12 +18,12 @@ Install the timestamped Picamera2 publisher as a systemd service.
 
 Usage:
   sudo ./scripts/install_pi_timestamp_service.sh \
-    --camera-id camera_1 \
-    --publish-url rtsp://192.168.1.100:8554/cam3
+    --camera-id raspberrypi9
 
 Options:
-  --camera-id ID       camera_1, camera_2, or camera_3 (required)
-  --publish-url URL    MediaMTX RTSP publish URL (required)
+  --camera-id ID       Stable ID (default: lowercase hostname)
+  --publish-url URL    Full MediaMTX URL (default: rtsp://HOST:8554/<hostname>)
+  --mediamtx-host HOST MediaMTX host used by the default URL
   --width N            Frame width (default: 1280)
   --height N           Frame height (default: 720)
   --fps N              Frame rate (default: 30)
@@ -38,6 +39,7 @@ while (($#)); do
   case "$1" in
     --camera-id) CAMERA_ID="${2:?}"; shift 2 ;;
     --publish-url) PUBLISH_URL="${2:?}"; shift 2 ;;
+    --mediamtx-host) MEDIAMTX_HOST="${2:?}"; shift 2 ;;
     --width) WIDTH="${2:?}"; shift 2 ;;
     --height) HEIGHT="${2:?}"; shift 2 ;;
     --fps) FPS="${2:?}"; shift 2 ;;
@@ -48,9 +50,12 @@ while (($#)); do
   esac
 done
 
-if [[ ! "$CAMERA_ID" =~ ^camera_[123]$ ]]; then
-  echo "--camera-id must be camera_1, camera_2, or camera_3" >&2
+if [[ ! "$CAMERA_ID" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
+  echo "--camera-id must be a valid lowercase hostname" >&2
   exit 2
+fi
+if [[ -z "$PUBLISH_URL" ]]; then
+  PUBLISH_URL="rtsp://${MEDIAMTX_HOST}:8554/${CAMERA_ID}"
 fi
 if [[ ! "$PUBLISH_URL" =~ ^rtsp:// ]]; then
   echo "--publish-url must be an rtsp:// URL" >&2
@@ -112,6 +117,7 @@ fi
 pkill -f 'rpicam-vid.*-t 0' 2>/dev/null || true
 pkill -f 'ffmpeg.*-f rtsp.*192\.168\.1\.100:8554/cam' 2>/dev/null || true
 systemctl daemon-reload
-systemctl enable --now "$SERVICE_NAME"
+systemctl enable "$SERVICE_NAME"
+systemctl restart "$SERVICE_NAME"
 sleep 2
 systemctl --no-pager --full status "$SERVICE_NAME"

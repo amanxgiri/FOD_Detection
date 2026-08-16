@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import signal
+import socket
 import struct
 import threading
 import time
@@ -20,21 +21,22 @@ except ImportError:  # The binary marker and latency measurement do not require 
 
 
 MARKER_MAGIC = b"FD"
-MARKER_VERSION = 1
-MARKER_COLUMNS = 80
+MARKER_VERSION = 2
+MARKER_COLUMNS = 92
 MARKER_ROWS = 2
 MARKER_CELL_SIZE = 6
 MARKER_RIGHT_MARGIN = 8
 MARKER_TOP = 8
-MARKER_PAYLOAD_FORMAT = ">2sBBIQ"
+MARKER_PAYLOAD_FORMAT = ">2sBIIQ"
 
 
-def encode_marker(camera_number: int, sequence_id: int, epoch_us: int) -> bytes:
+def encode_marker(camera_id: str, sequence_id: int, epoch_us: int) -> bytes:
+    hostname_identity = zlib.crc32(camera_id.encode("utf-8")) & 0xFFFFFFFF
     body = struct.pack(
         MARKER_PAYLOAD_FORMAT,
         MARKER_MAGIC,
         MARKER_VERSION,
-        camera_number,
+        hostname_identity,
         sequence_id & 0xFFFFFFFF,
         epoch_us,
     )
@@ -43,17 +45,17 @@ def encode_marker(camera_number: int, sequence_id: int, epoch_us: int) -> bytes:
 
 def draw_timestamp_marker(
     frame: np.ndarray,
-    camera_number: int,
+    camera_id: str,
     sequence_id: int,
     epoch_us: int,
     show_text: bool = True,
 ) -> None:
-    marker = encode_marker(camera_number, sequence_id, epoch_us)
+    marker = encode_marker(camera_id, sequence_id, epoch_us)
     bits = [(byte >> shift) & 1 for byte in marker for shift in range(7, -1, -1)]
     marker_width = MARKER_COLUMNS * MARKER_CELL_SIZE
     left = frame.shape[1] - MARKER_RIGHT_MARGIN - marker_width
     if left < 0 or frame.shape[0] < 60:
-        raise ValueError("frame must be at least 488 pixels wide and 60 pixels high")
+        raise ValueError("frame must be at least 560 pixels wide and 60 pixels high")
 
     marker_pixels = (
         np.asarray(bits, dtype=np.uint8)
@@ -93,10 +95,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Publish a low-latency Picamera2 RTSP feed with sensor timestamps."
     )
-    parser.add_argument("--camera-id", choices=("camera_1", "camera_2", "camera_3"), required=True)
+    parser.add_argument(
+        "--camera-id",
+        default=socket.gethostname().lower(),
+        help="Stable camera identity (default: this Pi hostname)",
+    )
     parser.add_argument(
         "--publish-url",
-        required=True,
+        default=None,
         help=(
             "RTSP publish endpoint, for example "
             "rtsp://192.168.1.100:8554/cam1"
@@ -155,7 +161,8 @@ def main() -> int:
     except ImportError:
         pass
 
-    camera_number = int(args.camera_id.rsplit("_", 1)[1])
+    if args.publish_url is None:
+        args.publish_url = f"rtsp://192.168.1.100:8554/{args.camera_id}"
     picam2 = Picamera2(args.camera_index)
     config = picam2.create_video_configuration(
         main={"size": (args.width, args.height), "format": "YUV420"},
@@ -186,7 +193,7 @@ def main() -> int:
         with MappedArray(request, "main") as mapped:
             draw_timestamp_marker(
                 mapped.array,
-                camera_number,
+                args.camera_id,
                 sequence,
                 epoch_us,
                 show_text=not args.no_readable_timestamp,

@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     camera_capture_read_timeout_ms: int = Field(default=1_000, gt=0)
     camera_capture_buffer_size: int = Field(default=1, gt=0)
     camera_capture_decoder_threads: int = Field(default=1, gt=0)
+    camera_max_count: int = Field(default=8, ge=1, le=32)
+    camera_discovery_interval_seconds: float = Field(default=2.0, ge=0.25)
+    mediamtx_api_url: str = "http://127.0.0.1:9997"
+    mediamtx_rtsp_url: str = "rtsp://127.0.0.1:8554"
 
     model_source_path: Path = Path("backend/models/weights/model_weight.pt")
     model_engine_path: Path = Path("backend/models/weights/model_weight.engine")
@@ -36,6 +40,7 @@ class Settings(BaseSettings):
     model_1_engine_path: Path = Path("backend/models/weights/model_1.engine")
     model_2_engine_path: Path = Path("backend/models/weights/model_2.engine")
     model_3_engine_path: Path = Path("backend/models/weights/model_3.engine")
+    model_catalog_directory: Path = Path("backend/models/weights")
     model_runtime: str = "tensorrt"
     model_device: str = "cuda:0"
     model_fallback_device: str = "cpu"

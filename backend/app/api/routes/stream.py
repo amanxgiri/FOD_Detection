@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import time
 
 import cv2
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from app.camera.types import FrameArray
@@ -38,25 +38,20 @@ def stream_video_compatibility(
     request: Request,
     frame_limit: int | None = Query(default=None, ge=1, include_in_schema=False),
 ) -> StreamingResponse:
-    return stream_video(request, "camera_1", frame_limit)
+    stores = getattr(request.app.state, "annotated_frame_stores", {})
+    camera_id = next(iter(stores), None)
+    if camera_id is None:
+        raise HTTPException(status_code=404, detail="no registered cameras")
+    return stream_video(request, camera_id, frame_limit)
 
 
 def get_annotated_frame_store(
     request: Request,
-    camera_id: str = "camera_1",
+    camera_id: str,
 ) -> LatestAnnotatedFrameStore:
-    if camera_id not in {"camera_1", "camera_2", "camera_3"}:
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=404, detail=f"unknown camera: {camera_id}")
     stores = getattr(request.app.state, "annotated_frame_stores", None)
-    if not isinstance(stores, dict):
-        stores = {
-            known_id: LatestAnnotatedFrameStore()
-            for known_id in ("camera_1", "camera_2", "camera_3")
-        }
-        request.app.state.annotated_frame_stores = stores
-        request.app.state.annotated_frame_store = stores["camera_1"]
+    if not isinstance(stores, dict) or camera_id not in stores:
+        raise HTTPException(status_code=404, detail=f"unknown camera: {camera_id}")
     return stores[camera_id]
 
 

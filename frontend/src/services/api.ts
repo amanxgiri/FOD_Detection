@@ -1,5 +1,10 @@
 import type { SystemStatusResponse } from "../types/system";
 import type { DetectionSummary } from "../types/detection";
+import type {
+  CameraListResponse,
+  CameraRecord,
+  ModelListResponse
+} from "../types/camera";
 
 const backendOrigin =
   import.meta.env.VITE_API_ORIGIN ??
@@ -24,6 +29,35 @@ export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
     throw new Error(`System status request failed: ${response.status}`);
   }
   return response.json() as Promise<SystemStatusResponse>;
+}
+
+export async function fetchCameras(): Promise<CameraListResponse> {
+  return getJson<CameraListResponse>("/cameras", "Camera list");
+}
+
+export async function fetchModels(): Promise<ModelListResponse> {
+  return getJson<ModelListResponse>("/models", "Model catalog");
+}
+
+export async function renameCamera(
+  cameraId: string,
+  displayName: string | null
+): Promise<CameraRecord> {
+  return sendCameraRequest(cameraId, "PATCH", { display_name: displayName });
+}
+
+export async function assignCameraModel(
+  cameraId: string,
+  modelId: string | null
+): Promise<CameraRecord> {
+  return sendCameraRequest(cameraId, "PUT", { model_id: modelId }, "/model");
+}
+
+export async function forgetCamera(cameraId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/cameras/${encodeURIComponent(cameraId)}`, {
+    method: "DELETE"
+  });
+  if (!response.ok) throw new Error(await readErrorDetail(response));
 }
 
 export function startCamera(): Promise<SystemStatusResponse> {
@@ -66,6 +100,30 @@ async function postRuntimeCommand(path: string): Promise<SystemStatusResponse> {
     throw new Error(await readErrorDetail(response));
   }
   return response.json() as Promise<SystemStatusResponse>;
+}
+
+async function getJson<T>(path: string, label: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`);
+  if (!response.ok) throw new Error(`${label} request failed: ${response.status}`);
+  return response.json() as Promise<T>;
+}
+
+async function sendCameraRequest(
+  cameraId: string,
+  method: "PATCH" | "PUT",
+  body: object,
+  suffix = ""
+): Promise<CameraRecord> {
+  const response = await fetch(
+    `${API_BASE_URL}/cameras/${encodeURIComponent(cameraId)}${suffix}`,
+    {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }
+  );
+  if (!response.ok) throw new Error(await readErrorDetail(response));
+  return response.json() as Promise<CameraRecord>;
 }
 
 async function readErrorDetail(response: Response): Promise<string> {

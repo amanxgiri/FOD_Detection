@@ -24,7 +24,7 @@ class CameraInferenceResult:
 
 
 class RoundRobinInferenceEngine:
-    """Serialize three camera/model lanes in a fixed repeating order."""
+    """Serialize the currently assigned camera/model lanes in round-robin order."""
 
     def __init__(
         self,
@@ -37,15 +37,13 @@ class RoundRobinInferenceEngine:
         frame_renderer: FrameRenderer | None = None,
         idle_backoff_seconds: float = 0.001,
     ) -> None:
-        camera_ids = tuple(frame_buffers)
-        if len(camera_ids) != 3:
-            raise ValueError("round-robin inference requires exactly three cameras")
-        if set(model_adapters) != set(camera_ids):
-            raise ValueError("every camera must have exactly one model adapter")
-        if set(annotated_frame_stores) != set(camera_ids):
-            raise ValueError("every camera must have an annotated frame store")
-        if set(temporal_validators) != set(camera_ids):
-            raise ValueError("every camera must have an independent temporal validator")
+        camera_ids = tuple(model_adapters)
+        if not set(camera_ids).issubset(frame_buffers):
+            raise ValueError("every inference lane must have a frame buffer")
+        if not set(camera_ids).issubset(annotated_frame_stores):
+            raise ValueError("every inference lane must have an annotated frame store")
+        if not set(camera_ids).issubset(temporal_validators):
+            raise ValueError("every inference lane must have a temporal validator")
 
         self._camera_ids = camera_ids
         self._frame_buffers = frame_buffers
@@ -58,6 +56,7 @@ class RoundRobinInferenceEngine:
         self._idle_backoff_seconds = max(0.0, idle_backoff_seconds)
 
         self._lock = threading.Lock()
+        self._lane_lock = threading.RLock()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_sequence_ids = {camera_id: 0 for camera_id in camera_ids}
@@ -105,6 +104,31 @@ class RoundRobinInferenceEngine:
         with self._lock:
             return self._latest_results.get(camera_id)
 
+    def upsert_lane(
+        self,
+        camera_id: str,
+        frame_buffer: LatestFrameBuffer,
+        model_adapter: ModelAdapter,
+        annotated_frame_store: LatestAnnotatedFrameStore,
+        temporal_validator: TemporalValidator,
+    ) -> None:
+        with self._lane_lock:
+            self._frame_buffers[camera_id] = frame_buffer
+            self._model_adapters[camera_id] = model_adapter
+            self._annotated_frame_stores[camera_id] = annotated_frame_store
+            self._temporal_validators[camera_id] = temporal_validator
+            self._last_sequence_ids.setdefault(camera_id, 0)
+            self._camera_ids = tuple(self._model_adapters)
+
+    def remove_lane(self, camera_id: str) -> None:
+        with self._lane_lock:
+            self._model_adapters.pop(camera_id, None)
+            self._temporal_validators.pop(camera_id, None)
+            self._last_sequence_ids.pop(camera_id, None)
+            self._camera_ids = tuple(self._model_adapters)
+        with self._lock:
+            self._latest_results.pop(camera_id, None)
+
     @property
     def active_camera_id(self) -> str | None:
         with self._lock:
@@ -123,7 +147,9 @@ class RoundRobinInferenceEngine:
     def _scheduler_loop(self) -> None:
         while not self._stop_event.is_set():
             inferred_in_cycle = False
-            for camera_id in self._camera_ids:
+            with self._lane_lock:
+                camera_ids = tuple(self._camera_ids)
+            for camera_id in camera_ids:
                 if self._stop_event.is_set():
                     break
                 inferred_in_cycle = self._run_slot(camera_id) or inferred_in_cycle
@@ -133,12 +159,25 @@ class RoundRobinInferenceEngine:
     def _run_slot(self, camera_id: str) -> bool:
         # A turn is a non-blocking snapshot, never a dequeue operation. Frames
         # overwritten before this instant are deliberately skipped forever.
-        packet = self._frame_buffers[camera_id].get_latest()
+        with self._lane_lock:
+            frame_buffer = self._frame_buffers.get(camera_id)
+            model_adapter = self._model_adapters.get(camera_id)
+            annotated_store = self._annotated_frame_stores.get(camera_id)
+            validator = self._temporal_validators.get(camera_id)
+            if (
+                frame_buffer is None
+                or model_adapter is None
+                or annotated_store is None
+                or validator is None
+            ):
+                return False
+            packet = frame_buffer.get_latest()
+            last_sequence_id = self._last_sequence_ids.get(camera_id, 0)
         with self._lock:
             self._slot_count += 1
         if (
             packet is None
-            or packet.sequence_id <= self._last_sequence_ids[camera_id]
+            or packet.sequence_id <= last_sequence_id
         ):
             with self._lock:
                 self._missed_slots += 1
@@ -146,16 +185,19 @@ class RoundRobinInferenceEngine:
 
         skipped_frames = max(
             0,
-            packet.sequence_id - self._last_sequence_ids[camera_id] - 1,
+            packet.sequence_id - last_sequence_id - 1,
         )
-        self._last_sequence_ids[camera_id] = packet.sequence_id
+        with self._lane_lock:
+            if camera_id not in self._model_adapters:
+                return False
+            self._last_sequence_ids[camera_id] = packet.sequence_id
         try:
             if packet.frame.size == 0 or packet.frame.ndim < 2:
                 raise ValueError(f"invalid frame from {camera_id}")
             with self._lock:
                 self._active_camera_id = camera_id
             started = time.perf_counter()
-            raw_detections = self._model_adapters[camera_id].predict(packet.frame)
+            raw_detections = model_adapter.predict(packet.frame)
             inference_ms = (time.perf_counter() - started) * 1000
             frame_height, frame_width = packet.frame.shape[:2]
             detections = self._postprocessor.process(
@@ -163,12 +205,12 @@ class RoundRobinInferenceEngine:
                 frame_width=frame_width,
                 frame_height=frame_height,
             )
-            confirmed = self._temporal_validators[camera_id].process(
+            confirmed = validator.process(
                 detections,
                 sequence_id=packet.sequence_id,
             )
             annotated = self._frame_renderer.render(packet.frame, detections)
-            self._annotated_frame_stores[camera_id].publish(
+            annotated_store.publish(
                 AnnotatedFrame(
                     sequence_id=packet.sequence_id,
                     captured_at=packet.captured_at,

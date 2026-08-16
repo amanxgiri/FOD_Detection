@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
+from app.camera.types import CameraStatus
 from app.main import create_app
 
 
@@ -20,31 +21,11 @@ def test_system_status_endpoint_returns_measured_defaults() -> None:
     assert body["capture_to_host_ms"] is None
     assert body["average_capture_to_host_ms"] is None
     assert body["source_timestamp_frames"] == 0
-    assert body["capture_to_host_ms_by_camera"] == {
-        "camera_1": None,
-        "camera_2": None,
-        "camera_3": None,
-    }
-    assert body["average_capture_to_host_ms_by_camera"] == {
-        "camera_1": None,
-        "camera_2": None,
-        "camera_3": None,
-    }
-    assert body["source_timestamp_frames_by_camera"] == {
-        "camera_1": 0,
-        "camera_2": 0,
-        "camera_3": 0,
-    }
-    assert body["inference_ms_by_camera"] == {
-        "camera_1": None,
-        "camera_2": None,
-        "camera_3": None,
-    }
-    assert body["total_latency_ms_by_camera"] == {
-        "camera_1": None,
-        "camera_2": None,
-        "camera_3": None,
-    }
+    assert body["capture_to_host_ms_by_camera"] == {}
+    assert body["average_capture_to_host_ms_by_camera"] == {}
+    assert body["source_timestamp_frames_by_camera"] == {}
+    assert body["inference_ms_by_camera"] == {}
+    assert body["total_latency_ms_by_camera"] == {}
     assert body["total_confirmed_detections"] == 0
 
 
@@ -63,8 +44,9 @@ def test_system_status_reports_latest_frame_age() -> None:
 
 def test_system_status_reports_sensor_capture_delay() -> None:
     app = create_app()
+    app.state.camera_managers = {"raspberrypi9": OnlineCamera()}
     app.state.performance_monitor.record_capture(
-        datetime.now(UTC), capture_to_host_ms=37.25, camera_id="camera_2"
+        datetime.now(UTC), capture_to_host_ms=37.25, camera_id="raspberrypi9"
     )
     client = TestClient(app)
 
@@ -74,6 +56,11 @@ def test_system_status_reports_sensor_capture_delay() -> None:
     assert response.json()["capture_to_host_ms"] == 37.25
     assert response.json()["average_capture_to_host_ms"] == 37.25
     assert response.json()["source_timestamp_frames"] == 1
-    assert response.json()["capture_to_host_ms_by_camera"]["camera_2"] == 37.25
-    assert response.json()["average_capture_to_host_ms_by_camera"]["camera_2"] == 37.25
-    assert response.json()["source_timestamp_frames_by_camera"]["camera_2"] == 1
+    assert response.json()["capture_to_host_ms_by_camera"]["raspberrypi9"] == 37.25
+    assert response.json()["average_capture_to_host_ms_by_camera"]["raspberrypi9"] == 37.25
+    assert response.json()["source_timestamp_frames_by_camera"]["raspberrypi9"] == 1
+
+
+class OnlineCamera:
+    def get_status(self) -> CameraStatus:
+        return CameraStatus.ONLINE

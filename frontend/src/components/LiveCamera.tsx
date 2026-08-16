@@ -6,13 +6,15 @@ import { cameraStreamUrl } from "../services/api";
 interface LiveCameraProps {
   backendOnline: boolean;
   cameraId: string;
-  modelId: string;
+  displayName: string;
+  modelId: string | null;
   cameraStatus: string | undefined;
 }
 
 export function LiveCamera({
   backendOnline,
   cameraId,
+  displayName,
   modelId,
   cameraStatus
 }: LiveCameraProps) {
@@ -38,17 +40,17 @@ export function LiveCamera({
   }, [backendOnline, cameraStatus]);
 
   return (
-    <section className="video-surface" aria-label={`${cameraId} live camera feed`}>
+    <section className="video-surface" aria-label={`${displayName} live camera feed`}>
       {showStream ? (
         <>
           <img
             className="video-frame"
             src={streamSrc}
-            alt={`${cameraId} live annotated FOD stream`}
+            alt={`${displayName} live annotated FOD stream`}
             onError={() => setStreamFailed(true)}
           />
           <div className="video-badge">
-            <MonitorPlay size={16} /> {formatCameraName(cameraId)} · {modelId}
+            <MonitorPlay size={16} /> {displayName} · {modelId ?? "Preview only"}
           </div>
           <div
             className="latency-badge"
@@ -68,8 +70,4 @@ export function LiveCamera({
       )}
     </section>
   );
-}
-
-function formatCameraName(cameraId: string) {
-  return cameraId.replace("_", " ").replace(/^./, (value) => value.toUpperCase());
 }

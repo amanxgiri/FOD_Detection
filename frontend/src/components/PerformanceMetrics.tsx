@@ -1,12 +1,12 @@
 import type { SystemStatusResponse } from "../types/system";
+import type { CameraRecord } from "../types/camera";
 
 interface PerformanceMetricsProps {
   status: SystemStatusResponse | null;
+  cameras: CameraRecord[];
 }
 
-const CAMERA_IDS = ["camera_1", "camera_2", "camera_3"] as const;
-
-export function PerformanceMetrics({ status }: PerformanceMetricsProps) {
+export function PerformanceMetrics({ status, cameras }: PerformanceMetricsProps) {
   return (
     <section className="panel performance-panel">
       <h2>Performance</h2>
@@ -18,22 +18,25 @@ export function PerformanceMetrics({ status }: PerformanceMetricsProps) {
           <span role="columnheader">Model inference</span>
           <span role="columnheader">Total latency</span>
         </div>
-        {CAMERA_IDS.map((cameraId) => (
-          <div className="camera-latency-table-row" role="row" key={cameraId}>
+        {cameras.map((camera) => (
+          <div className="camera-latency-table-row" role="row" key={camera.id}>
             <strong role="rowheader">
               <span className="camera-status-dot" aria-hidden="true" />
-              {formatCameraName(cameraId)}
+              {camera.display_name}
             </strong>
             <LatencyValue
-              value={status?.capture_to_host_ms_by_camera?.[cameraId]}
+              value={status?.capture_to_host_ms_by_camera?.[camera.id]}
             />
-            <LatencyValue value={status?.inference_ms_by_camera?.[cameraId]} />
+            <LatencyValue value={status?.inference_ms_by_camera?.[camera.id]} />
             <LatencyValue
               emphasized
-              value={status?.total_latency_ms_by_camera?.[cameraId]}
+              value={status?.total_latency_ms_by_camera?.[camera.id]}
             />
           </div>
         ))}
+        {cameras.length === 0 ? (
+          <p className="camera-table-empty">Waiting for a camera publisher…</p>
+        ) : null}
       </div>
 
       <h3 className="performance-summary-title">System throughput</h3>
@@ -98,8 +101,4 @@ function formatNullableMetric(value: number | null | undefined, suffix = "") {
     return "Unavailable";
   }
   return `${value.toFixed(1)}${suffix ? ` ${suffix}` : ""}`;
-}
-
-function formatCameraName(cameraId: string) {
-  return cameraId.replace("_", " ").replace(/^./, (value) => value.toUpperCase());
 }

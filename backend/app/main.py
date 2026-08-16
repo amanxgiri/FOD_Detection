@@ -5,11 +5,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
+from app.camera.discovery import MediaMtxDiscoveryService
 from app.core.config import get_settings
 from app.core.lifecycle import start_live_runtime, stop_live_runtime
 from app.core.logging import configure_logging, get_logger
 from app.api.websocket.connection_manager import WebSocketConnectionManager
-from app.inference.annotated_frame_store import LatestAnnotatedFrameStore
+from app.inference.model_catalog import ModelCatalog
 from app.inference.tensorrt_export import ensure_tensorrt_engines
 from app.monitoring.performance_monitor import PerformanceMonitor
 from app.storage import (
@@ -20,15 +21,6 @@ from app.storage import (
 )
 
 logger = get_logger(__name__)
-CAMERA_IDS = ("camera_1", "camera_2", "camera_3")
-
-
-def initialize_frame_stores(app: FastAPI) -> None:
-    stores = getattr(app.state, "annotated_frame_stores", None)
-    if not isinstance(stores, dict) or set(stores) != set(CAMERA_IDS):
-        stores = {camera_id: LatestAnnotatedFrameStore() for camera_id in CAMERA_IDS}
-        app.state.annotated_frame_stores = stores
-    app.state.annotated_frame_store = stores[CAMERA_IDS[0]]
 
 
 @asynccontextmanager
@@ -45,7 +37,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     for engine_path in generated_engines:
         logger.info("automatically created TensorRT engine: %s", engine_path)
-    initialize_frame_stores(app)
+    app.state.model_catalog = ModelCatalog(settings.model_catalog_directory)
     if not hasattr(app.state, "performance_monitor"):
         app.state.performance_monitor = PerformanceMonitor()
     if not hasattr(app.state, "session_factory"):
@@ -58,9 +50,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if not hasattr(app.state, "websocket_manager"):
         app.state.websocket_manager = WebSocketConnectionManager()
     start_live_runtime(app)
+    discovery = MediaMtxDiscoveryService(app)
+    app.state.camera_discovery = discovery
+    if not hasattr(app.state, "capture_factory"):
+        discovery.start()
     try:
         yield
     finally:
+        await discovery.stop()
         stop_live_runtime(app)
         logger.info("application shutdown")
 
@@ -74,6 +71,7 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    app.state.settings = settings
     frontend_origins = list(
         {
             settings.frontend_origin,
@@ -89,7 +87,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    initialize_frame_stores(app)
+    app.state.annotated_frame_stores = {}
+    app.state.annotated_frame_store = None
     app.state.performance_monitor = PerformanceMonitor()
     engine = create_database_engine(settings.database_url)
     init_database(engine)
@@ -97,6 +96,7 @@ def create_app() -> FastAPI:
     app.state.session_factory = create_session_factory(engine)
     app.state.evidence_store = EvidenceStore(settings.evidence_directory)
     app.state.websocket_manager = WebSocketConnectionManager()
+    app.state.model_catalog = ModelCatalog(settings.model_catalog_directory)
     app.include_router(api_router, prefix="/api/v1")
     return app
 

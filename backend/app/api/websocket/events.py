@@ -12,6 +12,10 @@ EventType = Literal[
     "fod.acknowledged",
     "camera.offline",
     "camera.online",
+    "camera.discovered",
+    "camera.removed",
+    "camera.updated",
+    "camera.model_updated",
     "system.warning",
 ]
 

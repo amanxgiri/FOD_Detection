@@ -125,7 +125,7 @@ def test_inference_runtime_requires_running_camera() -> None:
 
         assert response.status_code == 409
         assert response.json()["detail"] == (
-            "all three cameras must be running before inference starts"
+            "at least one online camera must have an assigned model"
         )
 
 

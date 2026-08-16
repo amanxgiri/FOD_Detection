@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TARGET_IP="${1:-192.168.1.100}"
-CAMERA_PATH="${2:-cam3}"
+CAMERA_PATH="${2:-$(hostname | tr '[:upper:]' '[:lower:]')}"
 WIDTH="${3:-1280}"
 HEIGHT="${4:-720}"
 FPS="${5:-30}"

@@ -1,14 +1,18 @@
 import { AlertTriangle, Camera, Cpu, Power, PowerOff } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ActiveAlert } from "../components/ActiveAlert";
 import { LiveCamera } from "../components/LiveCamera";
 import { PerformanceMetrics } from "../components/PerformanceMetrics";
 import { SystemStatus } from "../components/SystemStatus";
 import { useDetectionSocket } from "../hooks/useDetectionSocket";
+import { useCameras } from "../hooks/useCameras";
 import { useSystemStatus } from "../hooks/useSystemStatus";
 import {
   acknowledgeDetection,
+  assignCameraModel,
+  forgetCamera,
+  renameCamera,
   startCamera,
   startInference,
   stopCamera,
@@ -19,6 +23,7 @@ type RuntimeCommand = "camera" | "inference";
 
 export function Dashboard() {
   const status = useSystemStatus();
+  const registry = useCameras();
   const backendOnline = !status.error && !status.loading;
   const data = status.data;
   const detectionSocket = useDetectionSocket(backendOnline);
@@ -26,12 +31,34 @@ export function Dashboard() {
   const [acknowledgeError, setAcknowledgeError] = useState<string | null>(null);
   const [commandPending, setCommandPending] = useState<RuntimeCommand | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
+  const [pendingCameraId, setPendingCameraId] = useState<string | null>(null);
 
   const cameraStatus = data?.camera_status;
   const cameraActive =
     cameraStatus === "online" || cameraStatus === "opening" || cameraStatus === "degraded";
   const inferenceStatus = data?.inference_status;
   const inferenceRunning = inferenceStatus === "running" || inferenceStatus === "starting";
+
+  useEffect(() => {
+    if (detectionSocket.latestEvent?.type.startsWith("camera.")) {
+      void registry.refresh();
+      void status.refresh();
+    }
+  }, [detectionSocket.latestEvent?.timestamp]);
+
+  async function updateCamera(cameraId: string, action: () => Promise<unknown>) {
+    setPendingCameraId(cameraId);
+    setCommandError(null);
+    try {
+      await action();
+      await Promise.all([registry.refresh(), status.refresh()]);
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : "Camera update failed");
+      await registry.refresh();
+    } finally {
+      setPendingCameraId(null);
+    }
+  }
 
   async function handleAcknowledge(detectionId: string) {
     setAcknowledging(true);
@@ -119,16 +146,20 @@ export function Dashboard() {
       </section>
 
       <section className="dashboard-grid">
-        <div className="camera-grid" aria-label="Three independent camera feeds">
-          {(["camera_1", "camera_2", "camera_3"] as const).map((cameraId) => (
+        <div className={`camera-grid ${registry.cameras.length > 4 ? "camera-grid-scrollable" : ""}`} aria-label="Discovered camera feeds">
+          {registry.cameras.map((camera) => (
             <LiveCamera
-              key={cameraId}
+              key={camera.id}
               backendOnline={backendOnline}
-              cameraId={cameraId}
-              modelId={cameraId.replace("camera", "model")}
-              cameraStatus={data?.camera_statuses?.[cameraId] ?? cameraStatus}
+              cameraId={camera.id}
+              displayName={camera.display_name}
+              modelId={camera.selected_model_id}
+              cameraStatus={data?.camera_statuses?.[camera.id] ?? camera.stream_status}
             />
           ))}
+          {!registry.loading && registry.cameras.length === 0 ? (
+            <div className="camera-workspace-empty"><Camera size={36} /><strong>No cameras discovered</strong><span>Start a Pi publisher using its hostname as the RTSP path.</span></div>
+          ) : null}
         </div>
         <div className="side-panel">
           <ActiveAlert
@@ -139,8 +170,13 @@ export function Dashboard() {
             acknowledgeError={acknowledgeError}
             onAcknowledge={handleAcknowledge}
           />
-          <SystemStatus status={status} />
-          <PerformanceMetrics status={data} />
+          <SystemStatus status={status} cameras={registry.cameras} models={registry.models}
+            discoveryStatus={registry.discoveryStatus} warning={registry.warning ?? registry.error}
+            pendingCameraId={pendingCameraId}
+            onModelChange={(cameraId, modelId) => updateCamera(cameraId, () => assignCameraModel(cameraId, modelId))}
+            onRename={(cameraId, name) => updateCamera(cameraId, () => renameCamera(cameraId, name))}
+            onRemove={(cameraId) => updateCamera(cameraId, () => forgetCamera(cameraId))} />
+          <PerformanceMetrics status={data} cameras={registry.cameras} />
         </div>
       </section>
     </main>
