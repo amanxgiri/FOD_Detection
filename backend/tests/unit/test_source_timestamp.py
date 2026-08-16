@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import cv2
 import numpy as np
 
-from app.camera.source_timestamp import decode_source_timestamp
+from app.camera.source_timestamp import decode_source_timestamp, remove_source_timestamp_marker
 
 
 def _draw_test_marker(
@@ -54,5 +54,15 @@ def test_rejects_corrupt_marker() -> None:
     _draw_test_marker(frame, camera_number=1, sequence_id=7, epoch_us=1_787_000_000_000_000)
     # Flip the centre of bit 1 (a known one-bit in the magic byte 0x46).
     frame[11, frame.shape[1] - 8 - (80 * 6) + 6 + 3] = 0
+
+    assert decode_source_timestamp(frame) is None
+
+
+def test_removes_marker_after_decoding() -> None:
+    frame = np.full((720, 1280, 3), 90, dtype=np.uint8)
+    _draw_test_marker(frame, camera_number=2, sequence_id=42, epoch_us=1_787_000_000_000_000)
+    assert decode_source_timestamp(frame) is not None
+
+    remove_source_timestamp_marker(frame)
 
     assert decode_source_timestamp(frame) is None

@@ -26,8 +26,13 @@ class MediaMtxDiscoveryService:
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
         self._online_ids: set[str] = set()
+        self._suppressed_until_offline: set[str] = set()
         self.status = "starting"
         self.warning: str | None = None
+
+    def suppress_until_disconnect(self, camera_id: str) -> None:
+        """Keep a forgotten live publisher hidden until it disconnects once."""
+        self._suppressed_until_offline.add(camera_id.lower())
 
     def start(self) -> None:
         if self._task is None or self._task.done():
@@ -56,6 +61,11 @@ class MediaMtxDiscoveryService:
             self.warning = f"MediaMTX discovery unavailable: {exc}"
             logger.warning(self.warning)
             await self._app.state.websocket_manager.broadcast_warning(self.warning)
+        finally:
+            try:
+                get_runtime_controller(self._app).reconcile_inference_lanes()
+            except Exception as exc:
+                logger.warning("could not reconcile dynamic inference lanes: %s", exc)
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
@@ -84,6 +94,8 @@ class MediaMtxDiscoveryService:
             and HOSTNAME_PATTERN.fullmatch(item["name"].lower())
             and _has_h264(item)
         }
+        ready_ids = {path_name.lower() for path_name in ready_paths}
+        self._suppressed_until_offline.intersection_update(ready_ids)
         now = datetime.now(UTC)
         controller = get_runtime_controller(self._app)
         discovered_now: set[str] = set()
@@ -95,6 +107,8 @@ class MediaMtxDiscoveryService:
             existing = {record.id: record for record in repository.list_all()}
             for path_name in sorted(ready_paths):
                 camera_id = path_name.lower()
+                if camera_id in self._suppressed_until_offline:
+                    continue
                 if camera_id not in existing and len(existing) >= self._settings.camera_max_count:
                     scan_warning = (
                         f"Camera capacity {self._settings.camera_max_count} reached; "

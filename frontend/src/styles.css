@@ -230,19 +230,6 @@ h2 {
   top: 14px;
 }
 
-.latency-badge {
-  backdrop-filter: blur(8px);
-  background: rgba(10, 18, 24, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  bottom: 12px;
-  color: #d8fbea;
-  font-size: 0.72rem;
-  padding: 5px 8px;
-  position: absolute;
-  right: 12px;
-}
-
 .side-panel {
   display: grid;
   gap: 10px;
@@ -445,6 +432,44 @@ h2 {
   gap: 7px;
 }
 
+.camera-add-form {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-bottom: 8px;
+}
+
+.camera-add-form input {
+  background: #fff;
+  border: 1px solid #ccd7dd;
+  border-radius: 7px;
+  color: #2a3942;
+  font: inherit;
+  font-size: 0.7rem;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.camera-add-form button {
+  align-items: center;
+  background: #1e5731;
+  border: 0;
+  border-radius: 7px;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  gap: 4px;
+  padding: 6px 9px;
+}
+
+.camera-add-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .camera-service-list.scrollable {
   max-height: 244px;
   overflow-y: auto;
@@ -463,6 +488,16 @@ h2 {
   grid-template-columns: minmax(88px, 0.85fr) minmax(120px, 1.15fr) 24px;
   min-height: 55px;
   padding: 7px 8px;
+}
+
+.camera-latency-warning {
+  background: #fff3d6;
+  border-radius: 6px;
+  color: #7b5308;
+  font-size: 0.61rem;
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 5px 7px;
 }
 
 .camera-service-identity,

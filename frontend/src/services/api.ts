@@ -39,6 +39,16 @@ export async function fetchModels(): Promise<ModelListResponse> {
   return getJson<ModelListResponse>("/models", "Model catalog");
 }
 
+export async function addCamera(source: string): Promise<CameraRecord> {
+  const response = await fetch(`${API_BASE_URL}/cameras`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source })
+  });
+  if (!response.ok) throw new Error(await readErrorDetail(response));
+  return response.json() as Promise<CameraRecord>;
+}
+
 export async function renameCamera(
   cameraId: string,
   displayName: string | null

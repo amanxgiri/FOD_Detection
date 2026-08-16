@@ -52,12 +52,6 @@ export function LiveCamera({
           <div className="video-badge">
             <MonitorPlay size={16} /> {displayName} · {modelId ?? "Preview only"}
           </div>
-          <div
-            className="latency-badge"
-            title="Measured from laptop decode time to MJPEG send time; Pi encode, RTSP transit, and browser rendering are not included."
-          >
-            Latency overlay: laptop decode → stream
-          </div>
         </>
       ) : (
         <div className="video-placeholder">

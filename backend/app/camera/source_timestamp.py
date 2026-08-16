@@ -41,6 +41,24 @@ def source_identity_matches(camera_id: str, source_camera_id: str) -> bool:
     return source_camera_id == camera_id
 
 
+def remove_source_timestamp_marker(frame: FrameArray) -> None:
+    """Hide the decoded binary marker while preserving the readable timestamp."""
+    if frame.ndim < 2:
+        return
+    height, width = frame.shape[:2]
+    marker_width = MARKER_COLUMNS * MARKER_CELL_SIZE
+    left = width - MARKER_RIGHT_MARGIN - marker_width
+    destination_top = max(0, MARKER_TOP - MARKER_CELL_SIZE)
+    destination_bottom = MARKER_TOP + (MARKER_ROWS * MARKER_CELL_SIZE) + MARKER_CELL_SIZE
+    source_top = destination_bottom + 24
+    source_bottom = source_top + (destination_bottom - destination_top)
+    if left < 0 or source_bottom > height:
+        return
+    frame[destination_top:destination_bottom, left : width - MARKER_RIGHT_MARGIN] = (
+        frame[source_top:source_bottom, left : width - MARKER_RIGHT_MARGIN]
+    )
+
+
 def _decode_version(frame: FrameArray, expected_version: int) -> SourceTimestamp | None:
     if frame.ndim < 2:
         return None

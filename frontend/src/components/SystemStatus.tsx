@@ -1,4 +1,4 @@
-import { Check, Pencil, Trash2, X } from "lucide-react";
+import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
 import type { CameraRecord, ModelRecord } from "../types/camera";
@@ -11,13 +11,15 @@ interface SystemStatusProps {
   discoveryStatus: string;
   warning: string | null;
   pendingCameraId: string | null;
-  onModelChange: (cameraId: string, modelId: string | null) => Promise<void>;
-  onRename: (cameraId: string, name: string | null) => Promise<void>;
-  onRemove: (cameraId: string) => Promise<void>;
+  onAdd: (source: string) => Promise<boolean>;
+  onModelChange: (cameraId: string, modelId: string | null) => Promise<boolean>;
+  onRename: (cameraId: string, name: string | null) => Promise<boolean>;
+  onRemove: (cameraId: string) => Promise<boolean>;
 }
 
 export function SystemStatus({ status, cameras, models, discoveryStatus, warning,
-  pendingCameraId, onModelChange, onRename, onRemove }: SystemStatusProps) {
+  pendingCameraId, onAdd, onModelChange, onRename, onRemove }: SystemStatusProps) {
+  const [cameraSource, setCameraSource] = useState("");
   const data = status.data;
   const healthy = !status.error && data?.backend_status === "online" &&
     data.websocket_status === "connected" && discoveryStatus === "online";
@@ -36,6 +38,17 @@ export function SystemStatus({ status, cameras, models, discoveryStatus, warning
         <StatusRow label="Discovery" value={discoveryStatus} />
       </div>
       <h3 className="status-section-title">Camera services</h3>
+      <form className="camera-add-form" onSubmit={async (event) => {
+        event.preventDefault();
+        if (await onAdd(cameraSource.trim())) setCameraSource("");
+      }}>
+        <input type="text" required placeholder="0, /dev/video0, or rtsp://host/stream"
+          aria-label="Camera source" value={cameraSource}
+          onChange={(event) => setCameraSource(event.target.value)} />
+        <button type="submit" disabled={!cameraSource.trim() || pendingCameraId === "new-camera"}>
+          <Plus size={13} />{pendingCameraId === "new-camera" ? "Adding…" : "Add"}
+        </button>
+      </form>
       <div className={`camera-service-list ${cameras.length > 4 ? "scrollable" : ""}`}>
         {cameras.map((camera) => (
           <CameraServiceRow key={camera.id} camera={camera} models={models}
@@ -52,16 +65,14 @@ function CameraServiceRow({ camera, models, pending, onModelChange, onRename, on
   camera: CameraRecord;
   models: ModelRecord[];
   pending: boolean;
-  onModelChange: (cameraId: string, modelId: string | null) => Promise<void>;
-  onRename: (cameraId: string, name: string | null) => Promise<void>;
-  onRemove: (cameraId: string) => Promise<void>;
+  onModelChange: (cameraId: string, modelId: string | null) => Promise<boolean>;
+  onRename: (cameraId: string, name: string | null) => Promise<boolean>;
+  onRemove: (cameraId: string) => Promise<boolean>;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(camera.display_name);
-  const offline = ["offline", "stopped", "not_started"].includes(camera.stream_status);
   async function saveName() {
-    await onRename(camera.id, name.trim() || null);
-    setEditing(false);
+    if (await onRename(camera.id, name.trim() || null)) setEditing(false);
   }
   return (
     <article className="camera-service-row">
@@ -93,9 +104,12 @@ function CameraServiceRow({ camera, models, pending, onModelChange, onRename, on
         </span>
       </div>
       <button className="camera-remove" type="button"
-        title={offline ? "Forget this offline camera" : "Disconnect camera before removing"}
-        aria-label={`Forget ${camera.display_name}`} disabled={!offline || pending}
+        title="Remove camera"
+        aria-label={`Remove ${camera.display_name}`} disabled={pending}
         onClick={() => void onRemove(camera.id)}><Trash2 size={14} /></button>
+      {camera.latency_message ? (
+        <p className="camera-latency-warning">{camera.latency_message}</p>
+      ) : null}
     </article>
   );
 }

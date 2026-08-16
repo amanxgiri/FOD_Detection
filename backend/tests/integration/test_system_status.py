@@ -59,8 +59,42 @@ def test_system_status_reports_sensor_capture_delay() -> None:
     assert response.json()["capture_to_host_ms_by_camera"]["raspberrypi9"] == 37.25
     assert response.json()["average_capture_to_host_ms_by_camera"]["raspberrypi9"] == 37.25
     assert response.json()["source_timestamp_frames_by_camera"]["raspberrypi9"] == 1
+    assert response.json()["total_latency_ms_by_camera"]["raspberrypi9"] == 37.25
+    assert response.json()["average_total_latency_ms_by_camera"]["raspberrypi9"] == 37.25
+
+
+def test_system_status_total_matches_displayed_camera_and_inference_values() -> None:
+    app = create_app()
+    app.state.camera_managers = {"raspberrypi9": OnlineCamera()}
+    app.state.performance_monitor.record_capture(
+        datetime.now(UTC), capture_to_host_ms=265.5, camera_id="raspberrypi9"
+    )
+    app.state.performance_monitor.record_inference(
+        2.4, camera_id="raspberrypi9", total_latency_ms=280.0
+    )
+    app.state.runtime_controller = RunningInferenceRuntime()
+    client = TestClient(app)
+
+    body = client.get("/api/v1/system/status").json()
+
+    assert body["capture_to_host_ms_by_camera"]["raspberrypi9"] == 265.5
+    assert body["inference_ms_by_camera"]["raspberrypi9"] == 2.4
+    assert body["total_latency_ms_by_camera"]["raspberrypi9"] == 267.9
 
 
 class OnlineCamera:
     def get_status(self) -> CameraStatus:
         return CameraStatus.ONLINE
+
+
+class RunningInferenceRuntime:
+    def get_statuses(self):
+        from app.core.lifecycle import RuntimeStatuses
+
+        return RuntimeStatuses(
+            camera_status="online",
+            model_status="loaded",
+            inference_status="running",
+            camera_statuses={"raspberrypi9": "online"},
+            model_statuses={"raspberrypi9": "loaded"},
+        )

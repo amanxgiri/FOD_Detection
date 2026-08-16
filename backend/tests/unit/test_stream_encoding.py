@@ -47,6 +47,22 @@ def test_encode_multipart_frame_adds_visible_frame_age_metadata() -> None:
     assert b"X-Host-Frame-Age-Ms:" in payload
 
 
+def test_encode_multipart_frame_reports_sensor_to_host_not_stream_age() -> None:
+    frame = np.zeros((80, 640, 3), dtype=np.uint8)
+    source_captured_at = datetime.now(UTC) - timedelta(milliseconds=300)
+    host_captured_at = source_captured_at + timedelta(milliseconds=250)
+
+    payload = encode_multipart_frame(
+        frame,
+        jpeg_quality=80,
+        captured_at=host_captured_at,
+        source_captured_at=source_captured_at,
+    )
+
+    assert b"X-Sensor-To-Host-Ms: 250.0" in payload
+    assert b"X-Sensor-To-Stream-Age-Ms:" not in payload
+
+
 def test_calculate_frame_age_ms_clamps_clock_skew_to_zero() -> None:
     captured_at = datetime(2026, 1, 1, tzinfo=UTC)
 

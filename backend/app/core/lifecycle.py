@@ -50,7 +50,7 @@ class RuntimeController:
         self._frame_buffers: dict[str, LatestFrameBuffer] = {}
         self._annotated_frame_stores: dict[str, LatestAnnotatedFrameStore] = {}
         self._camera_managers: dict[str, CameraManager] = {}
-        self._camera_sources: dict[str, str] = {}
+        self._camera_sources: dict[str, int | str] = {}
         self._model_assignments: dict[str, str | None] = {}
         self._model_statuses: dict[str, str] = {}
         self._renderer = FrameRenderer()
@@ -125,7 +125,7 @@ class RuntimeController:
         camera_id: str,
         rtsp_path: str,
         selected_model_id: str | None = None,
-        source_override: str | None = None,
+        source_override: int | str | None = None,
     ) -> bool:
         with self._lock:
             if camera_id in self._camera_managers:
@@ -133,8 +133,10 @@ class RuntimeController:
                     self._model_assignments[camera_id] = selected_model_id
                     self._refresh_unloaded_model_status(camera_id)
                 return False
-            source = source_override or (
-                f"{self._settings.mediamtx_rtsp_url.rstrip('/')}/{rtsp_path}"
+            source = (
+                source_override
+                if source_override is not None
+                else f"{self._settings.mediamtx_rtsp_url.rstrip('/')}/{rtsp_path}"
             )
             frame_buffer = LatestFrameBuffer()
             store = LatestAnnotatedFrameStore()
@@ -167,14 +169,18 @@ class RuntimeController:
     def remove_camera(self, camera_id: str) -> None:
         with self._lock:
             manager = self._camera_managers.get(camera_id)
+        if manager is None:
+            raise RuntimeCommandError(f"unknown camera: {camera_id}")
+        if manager.get_status() not in {
+            CameraStatus.OFFLINE,
+            CameraStatus.STOPPED,
+            CameraStatus.NOT_STARTED,
+        }:
+            manager.stop()
+        with self._lock:
+            manager = self._camera_managers.get(camera_id)
             if manager is None:
                 raise RuntimeCommandError(f"unknown camera: {camera_id}")
-            if manager.get_status() not in {
-                CameraStatus.OFFLINE,
-                CameraStatus.STOPPED,
-                CameraStatus.NOT_STARTED,
-            }:
-                raise RuntimeCommandError("camera must be offline before it can be removed")
             if self._inference_engine is not None:
                 self._inference_engine.remove_lane(camera_id)
             model_id = self._model_assignments.get(camera_id)
@@ -288,6 +294,21 @@ class RuntimeController:
             self._model_adapters[camera_id] = adapter
             self._model_statuses[camera_id] = "loaded"
 
+    def reconcile_inference_lanes(self) -> None:
+        """Keep inference lanes aligned with capture state, including manual URLs."""
+        with self._lock:
+            managers = dict(self._camera_managers)
+        for camera_id, manager in managers.items():
+            if manager.restart_if_stale(self._settings.camera_stale_timeout_seconds):
+                logger.warning("restarted stale camera capture: %s", camera_id)
+        with self._lock:
+            camera_states = {
+                camera_id: manager.get_status() == CameraStatus.ONLINE
+                for camera_id, manager in self._camera_managers.items()
+            }
+        for camera_id, online in camera_states.items():
+            self.set_camera_online(camera_id, online)
+
     def start_inference(self) -> None:
         with self._lock:
             if self._inference_engine is not None and self._inference_engine.is_running():
@@ -374,7 +395,17 @@ class RuntimeController:
             with session_factory() as session:
                 records = CameraRepository(session).list_all()
         for record in records:
-            self.add_camera(record.id, record.rtsp_path, record.selected_model_id)
+            self.add_camera(
+                record.id,
+                record.rtsp_path,
+                record.selected_model_id,
+                source_override=(
+                    record.rtsp_path
+                    if record.id.startswith("manual-")
+                    or record.rtsp_path.lower().startswith(("rtsp://", "rtsps://"))
+                    else None
+                ),
+            )
         if not records and self._capture_factory is not None:
             for index, (camera_id, source) in enumerate(
                 self._settings.camera_sources.items(), start=1

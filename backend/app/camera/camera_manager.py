@@ -9,7 +9,11 @@ from typing import Any, Protocol
 
 from app.camera.frame_buffer import LatestFrameBuffer
 from app.camera.opencv_capture import create_opencv_capture
-from app.camera.source_timestamp import decode_source_timestamp, source_identity_matches
+from app.camera.source_timestamp import (
+    decode_source_timestamp,
+    remove_source_timestamp_marker,
+    source_identity_matches,
+)
 from app.camera.types import CameraStatus, FramePacket
 from app.core.logging import get_logger
 from app.monitoring.performance_monitor import PerformanceMonitor
@@ -70,6 +74,7 @@ class CameraManager:
         self._status = CameraStatus.NOT_STARTED
         self._sequence_id = 0
         self._read_failures = 0
+        self._last_frame_monotonic: float | None = None
 
     def start(self) -> None:
         with self._lock:
@@ -87,12 +92,40 @@ class CameraManager:
     def stop(self) -> None:
         self._stop_event.set()
         thread = self._thread
+        # Releasing first is important for local V4L2 cameras: their read()
+        # call can block indefinitely and otherwise prevents a clean restart.
+        self._release_capture()
         if thread is not None:
             thread.join(timeout=5)
-        self._release_capture()
         with self._lock:
-            self._thread = None
-            self._set_status(CameraStatus.STOPPED)
+            if thread is None or not thread.is_alive():
+                self._thread = None
+                self._set_status(CameraStatus.STOPPED)
+            else:
+                self._set_status(CameraStatus.DEGRADED)
+
+    def restart_if_stale(self, stale_after_seconds: float) -> bool:
+        if not self.is_stale(stale_after_seconds):
+            return False
+        logger.warning("camera frames are stale; restarting capture")
+        self.stop()
+        with self._lock:
+            can_restart = self._thread is None
+        if not can_restart:
+            logger.error("camera capture thread did not stop; restart deferred")
+            return False
+        self.start()
+        return True
+
+    def is_stale(self, stale_after_seconds: float) -> bool:
+        with self._lock:
+            last_frame = self._last_frame_monotonic
+            status = self._status
+        return (
+            status == CameraStatus.ONLINE
+            and last_frame is not None
+            and time.monotonic() - last_frame > stale_after_seconds
+        )
 
     def is_running(self) -> bool:
         thread = self._thread
@@ -126,6 +159,9 @@ class CameraManager:
                 raise
             with self._lock:
                 self._capture = capture
+                # Give a newly opened device one full watchdog interval to
+                # deliver its first frame.
+                self._last_frame_monotonic = time.monotonic()
             self._set_status(CameraStatus.ONLINE)
 
             while not self._stop_event.is_set():
@@ -167,6 +203,7 @@ class CameraManager:
         with self._lock:
             self._sequence_id += 1
             sequence_id = self._sequence_id
+            self._last_frame_monotonic = time.monotonic()
         self._set_status(CameraStatus.ONLINE)
         host_captured_at = datetime.now(UTC)
         source_timestamp = decode_source_timestamp(frame)
@@ -175,6 +212,8 @@ class CameraManager:
         ):
             logger.warning("source timestamp camera ID does not match configured camera")
             source_timestamp = None
+        if source_timestamp is not None:
+            remove_source_timestamp_marker(frame)
         capture_to_host_ms = (
             (host_captured_at - source_timestamp.captured_at).total_seconds() * 1000
             if source_timestamp is not None

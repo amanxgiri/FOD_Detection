@@ -11,6 +11,7 @@ def test_settings_defaults_match_prototype_contract() -> None:
     assert settings.model_runtime == "tensorrt"
     assert settings.model_device == "cuda:0"
     assert settings.model_fallback_device == "cpu"
+    assert settings.camera_stale_timeout_seconds == 5.0
     assert settings.model_confidence_threshold == 0.01
     assert settings.model_fod_class_id == 0
     assert settings.camera_sources == {

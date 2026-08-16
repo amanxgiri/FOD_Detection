@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     camera_capture_read_timeout_ms: int = Field(default=1_000, gt=0)
     camera_capture_buffer_size: int = Field(default=1, gt=0)
     camera_capture_decoder_threads: int = Field(default=1, gt=0)
+    camera_stale_timeout_seconds: float = Field(default=5.0, gt=0)
     camera_max_count: int = Field(default=8, ge=1, le=32)
     camera_discovery_interval_seconds: float = Field(default=2.0, ge=0.25)
     mediamtx_api_url: str = "http://127.0.0.1:9997"

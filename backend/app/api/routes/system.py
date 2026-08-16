@@ -27,6 +27,29 @@ def build_system_status_response(request: Request) -> SystemStatusResponse:
         latest_frame_age_ms = int(
             (datetime.now(UTC) - snapshot.latest_frame_timestamp).total_seconds() * 1000
         )
+    active_inference_cameras = {
+        camera_id
+        for camera_id, model_status in runtime_statuses.model_statuses.items()
+        if runtime_statuses.inference_status == "running" and model_status == "loaded"
+    }
+
+    def effective_total(camera_id: str, *, average: bool = False) -> float | None:
+        capture_values = (
+            snapshot.average_capture_to_host_ms_by_camera
+            if average
+            else snapshot.latest_capture_to_host_ms_by_camera
+        )
+        inference_values = (
+            snapshot.average_inference_ms_by_camera
+            if average
+            else snapshot.latest_inference_ms_by_camera
+        )
+        capture_value = capture_values.get(camera_id)
+        inference_value = inference_values.get(camera_id)
+        value = capture_value
+        if camera_id in active_inference_cameras and capture_value is not None:
+            value = capture_value + (inference_value or 0.0)
+        return round(value, 2) if value is not None else None
 
     return SystemStatusResponse(
         camera_status=runtime_statuses.camera_status,
@@ -93,19 +116,11 @@ def build_system_status_response(request: Request) -> SystemStatusResponse:
             for camera_id in runtime_statuses.camera_statuses
         },
         total_latency_ms_by_camera={
-            camera_id: (
-                round(snapshot.latest_total_latency_ms_by_camera[camera_id], 2)
-                if camera_id in snapshot.latest_total_latency_ms_by_camera
-                else None
-            )
+            camera_id: effective_total(camera_id)
             for camera_id in runtime_statuses.camera_statuses
         },
         average_total_latency_ms_by_camera={
-            camera_id: (
-                round(snapshot.average_total_latency_ms_by_camera[camera_id], 2)
-                if camera_id in snapshot.average_total_latency_ms_by_camera
-                else None
-            )
+            camera_id: effective_total(camera_id, average=True)
             for camera_id in runtime_statuses.camera_statuses
         },
         total_confirmed_detections=snapshot.confirmed_detection_count,

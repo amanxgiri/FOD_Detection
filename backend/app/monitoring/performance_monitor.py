@@ -25,6 +25,7 @@ class PerformanceSnapshot:
     latest_capture_to_host_ms_by_camera: dict[str, float]
     average_capture_to_host_ms_by_camera: dict[str, float]
     source_timestamp_frames_by_camera: dict[str, int]
+    frames_captured_by_camera: dict[str, int]
     latest_inference_ms_by_camera: dict[str, float]
     average_inference_ms_by_camera: dict[str, float]
     latest_total_latency_ms_by_camera: dict[str, float]
@@ -49,6 +50,7 @@ class PerformanceMonitor:
         self._source_timestamp_frames = 0
         self._capture_to_host_latencies_by_camera: dict[str, deque[float]] = {}
         self._source_timestamp_frames_by_camera: dict[str, int] = {}
+        self._frames_captured_by_camera: dict[str, int] = {}
         self._window_size = window_size
         self._inference_latencies_by_camera: dict[str, deque[float]] = {}
         self._total_latencies_by_camera: dict[str, deque[float]] = {}
@@ -63,6 +65,10 @@ class PerformanceMonitor:
             self._frames_captured += 1
             self._latest_frame_timestamp = captured_at
             self._capture_times.append(monotonic())
+            if camera_id is not None:
+                self._frames_captured_by_camera[camera_id] = (
+                    self._frames_captured_by_camera.get(camera_id, 0) + 1
+                )
             if capture_to_host_ms is not None:
                 self._capture_to_host_latencies_ms.append(capture_to_host_ms)
                 self._source_timestamp_frames += 1
@@ -159,6 +165,7 @@ class PerformanceMonitor:
                 source_timestamp_frames_by_camera=dict(
                     self._source_timestamp_frames_by_camera
                 ),
+                frames_captured_by_camera=dict(self._frames_captured_by_camera),
                 latest_inference_ms_by_camera={
                     camera_id: samples[-1]
                     for camera_id, samples in self._inference_latencies_by_camera.items()

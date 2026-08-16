@@ -7,6 +7,8 @@ export interface CameraRecord {
   stream_status: string;
   selected_model_id: string | null;
   model_status: string;
+  latency_status: string;
+  latency_message: string | null;
   discovered_at: string;
   last_seen_at: string;
 }

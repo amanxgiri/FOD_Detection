@@ -1,3 +1,4 @@
+import threading
 import time
 
 import numpy as np
@@ -34,6 +35,21 @@ class SequenceCaptureFactory:
         if self.captures:
             return self.captures.pop(0)
         return FakeCapture([])
+
+
+class BlockingCapture:
+    def __init__(self) -> None:
+        self.released = threading.Event()
+
+    def isOpened(self) -> bool:
+        return True
+
+    def read(self) -> tuple[bool, None]:
+        self.released.wait(timeout=2)
+        return False, None
+
+    def release(self) -> None:
+        self.released.set()
 
 
 def test_capture_one_publishes_timestamped_sequence() -> None:
@@ -128,3 +144,40 @@ def test_camera_source_normalization_preserves_linux_devices_and_stream_urls() -
         "rtsp://camera.local/live"
     )
     assert CameraManager._normalize_source("2") == 2
+
+
+def test_stale_blocked_capture_is_released_and_restarted() -> None:
+    first = BlockingCapture()
+    second = BlockingCapture()
+    captures = iter((first, second))
+    manager = CameraManager(
+        "0",
+        LatestFrameBuffer(),
+        reconnect_delay_seconds=0.01,
+        capture_factory=lambda source: next(captures),
+    )
+
+    manager.start()
+    wait_for_status(manager, CameraStatus.ONLINE)
+    time.sleep(0.02)
+
+    assert manager.restart_if_stale(0.01) is True
+    wait_for_status(manager, CameraStatus.ONLINE)
+    manager.stop()
+
+    assert first.released.is_set()
+    assert second.released.is_set()
+    assert manager.get_status() == CameraStatus.STOPPED
+
+
+def wait_for_status(
+    manager: CameraManager,
+    expected: CameraStatus,
+    timeout_seconds: float = 1.0,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if manager.get_status() == expected:
+            return
+        time.sleep(0.005)
+    raise AssertionError(f"camera did not reach {expected}")

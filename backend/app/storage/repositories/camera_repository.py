@@ -19,6 +19,11 @@ class CameraRepository:
     def get(self, camera_id: str) -> CameraRegistration | None:
         return self.session.get(CameraRegistration, camera_id)
 
+    def get_by_rtsp_path(self, rtsp_path: str) -> CameraRegistration | None:
+        return self.session.scalar(
+            select(CameraRegistration).where(CameraRegistration.rtsp_path == rtsp_path)
+        )
+
     def upsert_discovered(
         self,
         camera_id: str,
@@ -47,6 +52,28 @@ class CameraRepository:
         self.session.commit()
         self.session.refresh(record)
         return record, created
+
+    def create_manual(
+        self,
+        camera_id: str,
+        rtsp_url: str,
+        display_name: str,
+        publisher_ip: str | None,
+    ) -> CameraRegistration:
+        now = datetime.now(UTC)
+        record = CameraRegistration(
+            id=camera_id,
+            display_name=display_name,
+            rtsp_path=rtsp_url,
+            publisher_ip=publisher_ip,
+            discovered_at=now,
+            last_seen_at=now,
+            enabled=True,
+        )
+        self.session.add(record)
+        self.session.commit()
+        self.session.refresh(record)
+        return record
 
     def update_display_name(
         self, camera_id: str, display_name: str | None

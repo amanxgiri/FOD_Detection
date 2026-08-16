@@ -13,6 +13,7 @@ class FakeRuntimeController:
     def __init__(self) -> None:
         self.model_id: str | None = None
         self.removed: list[str] = []
+        self.added: list[tuple[str, str]] = []
 
     def get_statuses(self) -> RuntimeStatuses:
         return RuntimeStatuses(
@@ -29,6 +30,12 @@ class FakeRuntimeController:
 
     def remove_camera(self, camera_id: str) -> None:
         self.removed.append(camera_id)
+
+    def add_camera(self, camera_id: str, rtsp_path: str, selected_model_id=None,
+                   source_override=None) -> bool:
+        del selected_model_id
+        self.added.append((camera_id, source_override or rtsp_path))
+        return True
 
 
 def create_camera_app(tmp_path):
@@ -88,3 +95,53 @@ def test_invalid_model_and_offline_removal(tmp_path) -> None:
     assert removed.status_code == 204
     assert app.state.runtime_controller.removed == ["raspberrypi9"]
     assert missing.json()["items"] == []
+
+
+def test_manually_adds_rtsp_camera_and_rejects_duplicate(tmp_path) -> None:
+    app = create_camera_app(tmp_path)
+    client = TestClient(app)
+    url = "rtsp://viewer:secret@192.168.1.220:8554/runway"
+
+    added = client.post("/api/v1/cameras", json={"rtsp_url": url})
+    duplicate = client.post("/api/v1/cameras", json={"rtsp_url": url})
+    invalid = client.post("/api/v1/cameras", json={"rtsp_url": "http://camera/video"})
+
+    assert added.status_code == 201
+    assert added.json()["display_name"] == "runway"
+    assert added.json()["rtsp_path"] == "rtsp://192.168.1.220:8554/runway"
+    assert "secret" not in added.text
+    assert app.state.runtime_controller.added[0][1] == url
+    assert duplicate.status_code == 409
+    assert invalid.status_code == 422
+
+
+def test_manually_adds_local_camera_index_and_device_path(tmp_path) -> None:
+    app = create_camera_app(tmp_path)
+    client = TestClient(app)
+
+    index_camera = client.post("/api/v1/cameras", json={"source": "0"})
+    device_camera = client.post("/api/v1/cameras", json={"source": "/dev/video2"})
+
+    assert index_camera.status_code == 201
+    assert index_camera.json()["display_name"] == "Local camera 0"
+    assert index_camera.json()["rtsp_path"] == "0"
+    assert index_camera.json()["publisher_ip"] is None
+    assert device_camera.status_code == 201
+    assert device_camera.json()["display_name"] == "video2"
+    assert app.state.runtime_controller.added[-2][1] == "0"
+    assert app.state.runtime_controller.added[-1][1] == "/dev/video2"
+
+
+def test_manual_camera_source_validation_and_legacy_rtsp_field(tmp_path) -> None:
+    app = create_camera_app(tmp_path)
+    client = TestClient(app)
+
+    legacy = client.post(
+        "/api/v1/cameras", json={"rtsp_url": "rtsp://192.168.1.221/live"}
+    )
+    invalid_path = client.post("/api/v1/cameras", json={"source": "/tmp/video.mp4"})
+    invalid_index = client.post("/api/v1/cameras", json={"source": "999"})
+
+    assert legacy.status_code == 201
+    assert invalid_path.status_code == 422
+    assert invalid_index.status_code == 422

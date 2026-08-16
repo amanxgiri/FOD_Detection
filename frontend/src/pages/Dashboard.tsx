@@ -10,6 +10,7 @@ import { useCameras } from "../hooks/useCameras";
 import { useSystemStatus } from "../hooks/useSystemStatus";
 import {
   acknowledgeDetection,
+  addCamera,
   assignCameraModel,
   forgetCamera,
   renameCamera,
@@ -52,9 +53,11 @@ export function Dashboard() {
     try {
       await action();
       await Promise.all([registry.refresh(), status.refresh()]);
+      return true;
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : "Camera update failed");
       await registry.refresh();
+      return false;
     } finally {
       setPendingCameraId(null);
     }
@@ -173,6 +176,7 @@ export function Dashboard() {
           <SystemStatus status={status} cameras={registry.cameras} models={registry.models}
             discoveryStatus={registry.discoveryStatus} warning={registry.warning ?? registry.error}
             pendingCameraId={pendingCameraId}
+            onAdd={(source) => updateCamera("new-camera", () => addCamera(source))}
             onModelChange={(cameraId, modelId) => updateCamera(cameraId, () => assignCameraModel(cameraId, modelId))}
             onRename={(cameraId, name) => updateCamera(cameraId, () => renameCamera(cameraId, name))}
             onRemove={(cameraId) => updateCamera(cameraId, () => forgetCamera(cameraId))} />
