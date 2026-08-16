@@ -11,8 +11,12 @@ import time
 import zlib
 from datetime import UTC, datetime
 
-import cv2
 import numpy as np
+
+try:
+    import cv2
+except ImportError:  # The binary marker and latency measurement do not require OpenCV.
+    cv2 = None
 
 
 MARKER_MAGIC = b"FD"
@@ -51,14 +55,26 @@ def draw_timestamp_marker(
     if left < 0 or frame.shape[0] < 60:
         raise ValueError("frame must be at least 488 pixels wide and 60 pixels high")
 
-    for index, bit in enumerate(bits):
-        row, column = divmod(index, MARKER_COLUMNS)
-        x0 = left + column * MARKER_CELL_SIZE
-        y0 = MARKER_TOP + row * MARKER_CELL_SIZE
-        value = 255 if bit else 0
-        frame[y0 : y0 + MARKER_CELL_SIZE, x0 : x0 + MARKER_CELL_SIZE] = value
+    marker_pixels = (
+        np.asarray(bits, dtype=np.uint8)
+        .reshape(MARKER_ROWS, MARKER_COLUMNS)
+        .repeat(MARKER_CELL_SIZE, axis=0)
+        .repeat(MARKER_CELL_SIZE, axis=1)
+        * 255
+    )
+    marker_height = MARKER_ROWS * MARKER_CELL_SIZE
+    marker_region = frame[
+        MARKER_TOP : MARKER_TOP + marker_height,
+        left : left + marker_width,
+    ]
+    if marker_region.ndim == 3:
+        marker_region[:] = marker_pixels[:, :, None]
+    else:
+        # YUV420 is represented as a 2-D array. The marker sits entirely in
+        # the luma plane, leaving chroma untouched and avoiding RGB conversion.
+        marker_region[:] = marker_pixels
 
-    if show_text:
+    if show_text and cv2 is not None:
         captured_at = datetime.fromtimestamp(epoch_us / 1_000_000, tz=UTC)
         label = f"PI CAP {captured_at:%H:%M:%S}.{epoch_us % 1_000_000:06d} UTC"
         cv2.putText(
@@ -108,10 +124,41 @@ def main() -> int:
             "sudo apt install python3-picamera2 python3-opencv ffmpeg"
         ) from exc
 
+    # Picamera2 0.3.31 calls PyAV's newer from_numpy_buffer API, while some
+    # Raspberry Pi OS images still ship PyAV 10. Keep the workaround local to
+    # Picamera2's software H.264 encoder instead of modifying system packages.
+    try:
+        import picamera2.encoders.libav_h264_encoder as libav_h264_encoder
+
+        original_av = libav_h264_encoder.av
+        if not hasattr(original_av.VideoFrame, "from_numpy_buffer"):
+            original_video_frame = original_av.VideoFrame
+
+            class CompatibleVideoFrame:
+                @staticmethod
+                def from_ndarray(array, format, width=None):
+                    del width
+                    return original_video_frame.from_ndarray(array, format=format)
+
+                @staticmethod
+                def from_numpy_buffer(array, format, width=None):
+                    del width
+                    return original_video_frame.from_ndarray(array, format=format)
+
+            class CompatibleAvModule:
+                VideoFrame = CompatibleVideoFrame
+
+                def __getattr__(self, name):
+                    return getattr(original_av, name)
+
+            libav_h264_encoder.av = CompatibleAvModule()
+    except ImportError:
+        pass
+
     camera_number = int(args.camera_id.rsplit("_", 1)[1])
     picam2 = Picamera2(args.camera_index)
     config = picam2.create_video_configuration(
-        main={"size": (args.width, args.height), "format": "RGB888"},
+        main={"size": (args.width, args.height), "format": "YUV420"},
         controls={"FrameRate": args.fps},
         buffer_count=4,
     )
@@ -152,7 +199,7 @@ def main() -> int:
         iperiod=args.gop,
     )
     output = FfmpegOutput(
-        f"-f rtsp -rtsp_transport tcp {args.publish_url}",
+        f"-f rtsp -rtsp_transport tcp -pkt_size 1200 {args.publish_url}",
         audio=False,
     )
     stop_event = threading.Event()
@@ -164,6 +211,8 @@ def main() -> int:
     signal.signal(signal.SIGTERM, request_stop)
     print(f"Publishing {args.camera_id} to {args.publish_url}")
     print("The Pi clock must be NTP-synchronized for capture-to-laptop delay to be valid.")
+    if cv2 is None and not args.no_readable_timestamp:
+        print("OpenCV is unavailable; publishing the machine-readable timestamp marker only.")
     picam2.start_recording(encoder, output)
     try:
         while not stop_event.wait(1.0):

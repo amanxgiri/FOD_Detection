@@ -189,6 +189,12 @@ class RoundRobinInferenceEngine:
             self._performance_monitor.record_inference(
                 latency_ms=inference_ms,
                 skipped_frames=skipped_frames,
+                camera_id=camera_id,
+                total_latency_ms=(
+                    packet.capture_to_host_ms + inference_ms
+                    if packet.capture_to_host_ms is not None
+                    else None
+                ),
             )
         except Exception as exc:
             with self._lock:

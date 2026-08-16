@@ -22,6 +22,13 @@ class PerformanceSnapshot:
     latest_capture_to_host_ms: float | None
     average_capture_to_host_ms: float | None
     source_timestamp_frames: int
+    latest_capture_to_host_ms_by_camera: dict[str, float]
+    average_capture_to_host_ms_by_camera: dict[str, float]
+    source_timestamp_frames_by_camera: dict[str, int]
+    latest_inference_ms_by_camera: dict[str, float]
+    average_inference_ms_by_camera: dict[str, float]
+    latest_total_latency_ms_by_camera: dict[str, float]
+    average_total_latency_ms_by_camera: dict[str, float]
 
 
 class PerformanceMonitor:
@@ -40,11 +47,17 @@ class PerformanceMonitor:
         self._camera_read_failures = 0
         self._capture_to_host_latencies_ms: deque[float] = deque(maxlen=window_size)
         self._source_timestamp_frames = 0
+        self._capture_to_host_latencies_by_camera: dict[str, deque[float]] = {}
+        self._source_timestamp_frames_by_camera: dict[str, int] = {}
+        self._window_size = window_size
+        self._inference_latencies_by_camera: dict[str, deque[float]] = {}
+        self._total_latencies_by_camera: dict[str, deque[float]] = {}
 
     def record_capture(
         self,
         captured_at: datetime,
         capture_to_host_ms: float | None = None,
+        camera_id: str | None = None,
     ) -> None:
         with self._lock:
             self._frames_captured += 1
@@ -53,13 +66,40 @@ class PerformanceMonitor:
             if capture_to_host_ms is not None:
                 self._capture_to_host_latencies_ms.append(capture_to_host_ms)
                 self._source_timestamp_frames += 1
+                if camera_id is not None:
+                    samples = self._capture_to_host_latencies_by_camera.setdefault(
+                        camera_id,
+                        deque(maxlen=self._window_size),
+                    )
+                    samples.append(capture_to_host_ms)
+                    self._source_timestamp_frames_by_camera[camera_id] = (
+                        self._source_timestamp_frames_by_camera.get(camera_id, 0) + 1
+                    )
 
-    def record_inference(self, latency_ms: float, skipped_frames: int = 0) -> None:
+    def record_inference(
+        self,
+        latency_ms: float,
+        skipped_frames: int = 0,
+        camera_id: str | None = None,
+        total_latency_ms: float | None = None,
+    ) -> None:
         with self._lock:
             self._frames_inferred += 1
             self._frames_skipped += max(0, skipped_frames)
             self._inference_latencies_ms.append(latency_ms)
             self._inference_times.append(monotonic())
+            if camera_id is not None:
+                inference_samples = self._inference_latencies_by_camera.setdefault(
+                    camera_id,
+                    deque(maxlen=self._window_size),
+                )
+                inference_samples.append(latency_ms)
+                if total_latency_ms is not None:
+                    total_samples = self._total_latencies_by_camera.setdefault(
+                        camera_id,
+                        deque(maxlen=self._window_size),
+                    )
+                    total_samples.append(total_latency_ms)
 
     def record_camera_read_failure(self) -> None:
         with self._lock:
@@ -106,6 +146,39 @@ class PerformanceMonitor:
                 latest_capture_to_host_ms=latest_capture_to_host_ms,
                 average_capture_to_host_ms=average_capture_to_host_ms,
                 source_timestamp_frames=self._source_timestamp_frames,
+                latest_capture_to_host_ms_by_camera={
+                    camera_id: samples[-1]
+                    for camera_id, samples in self._capture_to_host_latencies_by_camera.items()
+                    if samples
+                },
+                average_capture_to_host_ms_by_camera={
+                    camera_id: sum(samples) / len(samples)
+                    for camera_id, samples in self._capture_to_host_latencies_by_camera.items()
+                    if samples
+                },
+                source_timestamp_frames_by_camera=dict(
+                    self._source_timestamp_frames_by_camera
+                ),
+                latest_inference_ms_by_camera={
+                    camera_id: samples[-1]
+                    for camera_id, samples in self._inference_latencies_by_camera.items()
+                    if samples
+                },
+                average_inference_ms_by_camera={
+                    camera_id: sum(samples) / len(samples)
+                    for camera_id, samples in self._inference_latencies_by_camera.items()
+                    if samples
+                },
+                latest_total_latency_ms_by_camera={
+                    camera_id: samples[-1]
+                    for camera_id, samples in self._total_latencies_by_camera.items()
+                    if samples
+                },
+                average_total_latency_ms_by_camera={
+                    camera_id: sum(samples) / len(samples)
+                    for camera_id, samples in self._total_latencies_by_camera.items()
+                    if samples
+                },
             )
 
     @staticmethod

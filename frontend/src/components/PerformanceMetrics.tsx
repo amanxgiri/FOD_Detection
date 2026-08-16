@@ -9,6 +9,27 @@ export function PerformanceMetrics({ status }: PerformanceMetricsProps) {
     <section className="panel">
       <h2>Performance</h2>
       <dl>
+        {(["camera_1", "camera_2", "camera_3"] as const).map((cameraId) => (
+          <div className="camera-latency-group" key={cameraId}>
+            <dt>{formatCameraName(cameraId)} latency</dt>
+            <dd>
+              Camera → host: {formatNullableMetric(
+                status?.capture_to_host_ms_by_camera?.[cameraId],
+                "ms"
+              )}
+              <br />
+              Model inference: {formatNullableMetric(
+                status?.inference_ms_by_camera?.[cameraId],
+                "ms"
+              )}
+              <br />
+              Total: {formatNullableMetric(
+                status?.total_latency_ms_by_camera?.[cameraId],
+                "ms"
+              )}
+            </dd>
+          </div>
+        ))}
         <div>
           <dt>Capture FPS</dt>
           <dd>{formatMetric(status?.capture_fps)}</dd>
@@ -62,4 +83,8 @@ function formatNullableMetric(value: number | null | undefined, suffix = "") {
     return "Unavailable";
   }
   return `${value}${suffix ? ` ${suffix}` : ""}`;
+}
+
+function formatCameraName(cameraId: string) {
+  return cameraId.replace("_", " ").replace(/^./, (value) => value.toUpperCase());
 }

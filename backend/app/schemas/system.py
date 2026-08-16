@@ -27,4 +27,11 @@ class SystemStatusResponse(BaseModel):
     capture_to_host_ms: float | None
     average_capture_to_host_ms: float | None
     source_timestamp_frames: int
+    capture_to_host_ms_by_camera: dict[str, float | None]
+    average_capture_to_host_ms_by_camera: dict[str, float | None]
+    source_timestamp_frames_by_camera: dict[str, int]
+    inference_ms_by_camera: dict[str, float | None]
+    average_inference_ms_by_camera: dict[str, float | None]
+    total_latency_ms_by_camera: dict[str, float | None]
+    average_total_latency_ms_by_camera: dict[str, float | None]
     total_confirmed_detections: int

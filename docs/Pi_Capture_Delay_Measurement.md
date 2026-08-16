@@ -15,6 +15,19 @@ The stream overlay also reports `Sensor → stream`, measured immediately before
 
 One-way timestamps require the Pi and laptop clocks to agree. First check the time service already supplied by Raspberry Pi OS:
 
+The repeatable repository setup is:
+
+```bash
+# Run once on the Ubuntu backend host.
+sudo ./scripts/setup_host_time_server.sh --subnet 192.168.1.0/24
+
+# Run on every Pi whenever it is added to the camera LAN.
+sudo ./scripts/setup_pi_clock_sync.sh --server 192.168.1.100
+
+# A later read-only health check needs no sudo.
+./scripts/setup_pi_clock_sync.sh --check-only
+```
+
 ```bash
 timedatectl status
 systemctl status systemd-timesyncd --no-pager
@@ -205,16 +218,16 @@ Stop the previous camera publisher for the same MediaMTX path before starting th
 
 | Pi | Pi address | Application ID | Publish URL | Backend read URL |
 |---|---|---|---|---|
-| picam7 | `192.168.1.203` | `camera_1` | `rtsp://192.168.1.100:8554/cam1` | `rtsp://192.168.1.100:8554/cam1` |
-| picam9 | `192.168.1.204` | `camera_2` | `rtsp://192.168.1.100:8554/cam2` | `rtsp://192.168.1.100:8554/cam2` |
-| picam11 | `192.168.1.205` | `camera_3` | `rtsp://192.168.1.100:8554/cam3` | `rtsp://192.168.1.100:8554/cam3` |
+| picam7 | `192.168.1.203` | `camera_1` | `rtsp://192.168.1.100:8554/cam3` | `rtsp://192.168.1.100:8554/cam3` |
+| picam9 | `192.168.1.204` | `camera_2` | `rtsp://192.168.1.100:8554/cam4` | `rtsp://192.168.1.100:8554/cam4` |
+| picam11 | `192.168.1.205` | `camera_3` | `rtsp://192.168.1.100:8554/cam5` | `rtsp://192.168.1.100:8554/cam5` |
 
 Run on picam7:
 
 ```bash
 python3 scripts/pi_timestamped_rtsp.py \
   --camera-id camera_1 \
-  --publish-url rtsp://192.168.1.100:8554/cam1 \
+  --publish-url rtsp://192.168.1.100:8554/cam3 \
   --width 1280 --height 720 --fps 30 \
   --bitrate 4000000 --gop 15
 ```
@@ -224,7 +237,7 @@ Run on picam9:
 ```bash
 python3 scripts/pi_timestamped_rtsp.py \
   --camera-id camera_2 \
-  --publish-url rtsp://192.168.1.100:8554/cam2 \
+  --publish-url rtsp://192.168.1.100:8554/cam4 \
   --width 1280 --height 720 --fps 30 \
   --bitrate 4000000 --gop 15
 ```
@@ -234,19 +247,44 @@ Run on picam11:
 ```bash
 python3 scripts/pi_timestamped_rtsp.py \
   --camera-id camera_3 \
-  --publish-url rtsp://192.168.1.100:8554/cam3 \
+  --publish-url rtsp://192.168.1.100:8554/cam5 \
   --width 1280 --height 720 --fps 30 \
   --bitrate 4000000 --gop 15
 ```
 
 The marker requires a width of at least 488 pixels. Press Ctrl+C to stop cleanly.
 
+The publisher uses YUV420 and changes only the luma cells occupied by the
+machine-readable marker. This avoids the RGB conversion path that previously
+produced corrupt/choppy H.264 on some Raspberry Pi 5 Picamera2/PyAV package
+combinations. It also publishes over RTSP/TCP with a 1200-byte RTP packet size.
+Live validation on picam9 at 1280x720 and picam11 at 640x360 sustained about 30
+timestamp updates per second without decoder errors.
+
+The validated smooth live publisher is:
+
+```bash
+./scripts/pi_rpicam_rtsp.sh 192.168.1.100 cam4 1280 720 30 15
+```
+
+It publishes over RTSP/TCP with a 1200-byte RTP packet size and retries after a
+relay restart. On the MediaMTX host, use a sufficiently large bounded outgoing
+packet queue for 720p streams:
+
+```yaml
+writeQueueSize: 512
+```
+
+A queue of 32 packets caused slow-reader frame drops and visible H.264 corruption
+at 1280x720. This hardware-camera publisher does not embed a source timestamp,
+so use it only as a fallback when capture-to-host measurement is not required.
+
 Configure the laptop project to read the same three paths:
 
 ```dotenv
-CAMERA_1_SOURCE=rtsp://192.168.1.100:8554/cam1
-CAMERA_2_SOURCE=rtsp://192.168.1.100:8554/cam2
-CAMERA_3_SOURCE=rtsp://192.168.1.100:8554/cam3
+CAMERA_1_SOURCE=rtsp://192.168.1.100:8554/cam3
+CAMERA_2_SOURCE=rtsp://192.168.1.100:8554/cam4
+CAMERA_3_SOURCE=rtsp://192.168.1.100:8554/cam5
 ```
 
 If MediaMTX authentication is enabled, the Pi needs publisher credentials and the backend needs reader credentials. Put the appropriate credentials into the respective URLs; do not commit real passwords to Git.
@@ -257,8 +295,14 @@ Restart the laptop backend and frontend normally. The Performance panel will sho
 
 - **Capture → host**: latest sensor-start-to-laptop-decode delay;
 - **Avg capture → host**: rolling average over the latest 120 timestamped frames;
+- **Camera 1/2/3 sensor → host**: latest delay from each Pi independently;
+- **Model inference**: latest model execution time for that camera;
+- **Total**: camera-to-host delay plus model inference time for that camera;
 - **Latest frame age**: time since the backend received its newest frame;
 - the video overlay **Sensor → stream**: sensor capture to backend MJPEG send time.
+
+The status endpoint and Performance panel refresh once per second. The Pi marker
+itself advances on every captured frame.
 
 If the two capture-to-host values say **Unavailable**, check these in order:
 

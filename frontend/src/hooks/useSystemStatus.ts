@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchSystemStatus } from "../services/api";
 import type { SystemStatusResponse, SystemStatusState } from "../types/system";
 
-const POLL_MS = 3000;
+const POLL_MS = 1000;
 type StatusState = Omit<SystemStatusState, "refresh">;
 
 export function useSystemStatus(): SystemStatusState {

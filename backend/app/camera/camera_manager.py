@@ -191,6 +191,7 @@ class CameraManager:
             self._performance_monitor.record_capture(
                 packet.captured_at,
                 capture_to_host_ms=packet.capture_to_host_ms,
+                camera_id=self.camera_id,
             )
         return packet
 

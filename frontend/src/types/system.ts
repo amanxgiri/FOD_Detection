@@ -16,6 +16,13 @@ export interface SystemStatusResponse {
   capture_to_host_ms: number | null;
   average_capture_to_host_ms: number | null;
   source_timestamp_frames: number;
+  capture_to_host_ms_by_camera: Record<string, number | null>;
+  average_capture_to_host_ms_by_camera: Record<string, number | null>;
+  source_timestamp_frames_by_camera: Record<string, number>;
+  inference_ms_by_camera: Record<string, number | null>;
+  average_inference_ms_by_camera: Record<string, number | null>;
+  total_latency_ms_by_camera: Record<string, number | null>;
+  average_total_latency_ms_by_camera: Record<string, number | null>;
   total_confirmed_detections: number;
 }
 

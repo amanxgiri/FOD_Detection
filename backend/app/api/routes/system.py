@@ -56,6 +56,58 @@ def build_system_status_response(request: Request) -> SystemStatusResponse:
             else None
         ),
         source_timestamp_frames=snapshot.source_timestamp_frames,
+        capture_to_host_ms_by_camera={
+            camera_id: (
+                round(snapshot.latest_capture_to_host_ms_by_camera[camera_id], 2)
+                if camera_id in snapshot.latest_capture_to_host_ms_by_camera
+                else None
+            )
+            for camera_id in runtime_statuses.camera_statuses
+        },
+        average_capture_to_host_ms_by_camera={
+            camera_id: (
+                round(snapshot.average_capture_to_host_ms_by_camera[camera_id], 2)
+                if camera_id in snapshot.average_capture_to_host_ms_by_camera
+                else None
+            )
+            for camera_id in runtime_statuses.camera_statuses
+        },
+        source_timestamp_frames_by_camera={
+            camera_id: snapshot.source_timestamp_frames_by_camera.get(camera_id, 0)
+            for camera_id in runtime_statuses.camera_statuses
+        },
+        inference_ms_by_camera={
+            camera_id: (
+                round(snapshot.latest_inference_ms_by_camera[camera_id], 2)
+                if camera_id in snapshot.latest_inference_ms_by_camera
+                else None
+            )
+            for camera_id in runtime_statuses.camera_statuses
+        },
+        average_inference_ms_by_camera={
+            camera_id: (
+                round(snapshot.average_inference_ms_by_camera[camera_id], 2)
+                if camera_id in snapshot.average_inference_ms_by_camera
+                else None
+            )
+            for camera_id in runtime_statuses.camera_statuses
+        },
+        total_latency_ms_by_camera={
+            camera_id: (
+                round(snapshot.latest_total_latency_ms_by_camera[camera_id], 2)
+                if camera_id in snapshot.latest_total_latency_ms_by_camera
+                else None
+            )
+            for camera_id in runtime_statuses.camera_statuses
+        },
+        average_total_latency_ms_by_camera={
+            camera_id: (
+                round(snapshot.average_total_latency_ms_by_camera[camera_id], 2)
+                if camera_id in snapshot.average_total_latency_ms_by_camera
+                else None
+            )
+            for camera_id in runtime_statuses.camera_statuses
+        },
         total_confirmed_detections=snapshot.confirmed_detection_count,
     )
 
