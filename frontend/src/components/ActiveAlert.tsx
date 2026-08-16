@@ -20,11 +20,14 @@ export function ActiveAlert({
   onAcknowledge
 }: ActiveAlertProps) {
   return (
-    <section className="panel">
-      <h2>{icon} Active Alert</h2>
-      <p className={websocketConnected ? "connection-ok" : "panel-warning"}>
-        WebSocket {websocketConnected ? "connected" : "reconnecting"}
-      </p>
+    <section className="panel alert-panel">
+      <div className="panel-heading alert-panel-heading">
+        <h2>{icon} Active alert</h2>
+        <span className={websocketConnected ? "connection-chip" : "connection-chip reconnecting"}>
+          <span aria-hidden="true" />
+          {websocketConnected ? "Live" : "Reconnecting"}
+        </span>
+      </div>
       {alert ? (
         <div className="alert-detail">
           <img src={alert.data.evidence_url} alt={`${alert.data.class_name} evidence`} />
@@ -53,7 +56,10 @@ export function ActiveAlert({
           </button>
         </div>
       ) : (
-        <p>No confirmed FOD alert is active.</p>
+        <div className="alert-empty-state">
+          <strong>All clear</strong>
+          <p>No confirmed FOD alert is active.</p>
+        </div>
       )}
     </section>
   );

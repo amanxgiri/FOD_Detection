@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, Camera, Cpu, Gauge, Power, PowerOff } from "lucide-react";
+import { AlertTriangle, Camera, Cpu, Power, PowerOff } from "lucide-react";
 import { useState } from "react";
 
 import { ActiveAlert } from "../components/ActiveAlert";
@@ -68,28 +68,16 @@ export function Dashboard() {
   return (
     <main className="app-shell">
       <section className="topbar" aria-label="Dashboard summary">
-        <div>
-          <p className="eyebrow">Three-camera round-robin prototype</p>
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true">
+            <Camera size={22} />
+          </span>
           <h1>FOD Detection</h1>
         </div>
         <div className="topbar-actions">
-          <div className="status-strip">
-            <span>
-              <Camera size={16} /> {cameraStatus?.replaceAll("_", " ") ?? "Camera pending"}
-            </span>
-            <span>
-              <Activity size={16} /> {data?.model_status?.replaceAll("_", " ") ?? "Model pending"}
-            </span>
-            <span>
-              <Gauge size={16} /> {backendOnline ? "Metrics live" : "Metrics unavailable"}
-            </span>
-            <span>
-              <AlertTriangle size={16} /> {detectionSocket.connected ? "Alerts live" : "Alerts pending"}
-            </span>
-          </div>
           <div className="runtime-controls" aria-label="Runtime controls">
             <button
-              className="runtime-control"
+              className={`runtime-control ${cameraActive ? "runtime-control-stop" : ""}`}
               type="button"
               disabled={!backendOnline || commandPending !== null}
               onClick={() =>
@@ -104,7 +92,7 @@ export function Dashboard() {
                   : "Start Camera"}
             </button>
             <button
-              className="runtime-control"
+              className={`runtime-control ${inferenceRunning ? "runtime-control-stop" : ""}`}
               type="button"
               disabled={
                 !backendOnline ||

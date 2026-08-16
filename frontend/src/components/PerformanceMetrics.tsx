@@ -11,29 +11,28 @@ export function PerformanceMetrics({ status }: PerformanceMetricsProps) {
     <section className="panel performance-panel">
       <h2>Performance</h2>
 
-      <div className="camera-latency-list">
+      <div className="camera-latency-table" role="table" aria-label="Camera latency">
+        <div className="camera-latency-table-header" role="row">
+          <span role="columnheader">Camera</span>
+          <span role="columnheader">Sensor to host</span>
+          <span role="columnheader">Model inference</span>
+          <span role="columnheader">Total latency</span>
+        </div>
         {CAMERA_IDS.map((cameraId) => (
-          <article className="camera-latency-card" key={cameraId}>
-            <header>
+          <div className="camera-latency-table-row" role="row" key={cameraId}>
+            <strong role="rowheader">
               <span className="camera-status-dot" aria-hidden="true" />
-              <h3>{formatCameraName(cameraId)}</h3>
-            </header>
-            <dl className="latency-metrics">
-              <LatencyMetric
-                label="Sensor to host"
-                value={status?.capture_to_host_ms_by_camera?.[cameraId]}
-              />
-              <LatencyMetric
-                label="Model inference"
-                value={status?.inference_ms_by_camera?.[cameraId]}
-              />
-              <LatencyMetric
-                emphasized
-                label="Total latency"
-                value={status?.total_latency_ms_by_camera?.[cameraId]}
-              />
-            </dl>
-          </article>
+              {formatCameraName(cameraId)}
+            </strong>
+            <LatencyValue
+              value={status?.capture_to_host_ms_by_camera?.[cameraId]}
+            />
+            <LatencyValue value={status?.inference_ms_by_camera?.[cameraId]} />
+            <LatencyValue
+              emphasized
+              value={status?.total_latency_ms_by_camera?.[cameraId]}
+            />
+          </div>
         ))}
       </div>
 
@@ -68,21 +67,22 @@ export function PerformanceMetrics({ status }: PerformanceMetricsProps) {
   );
 }
 
-interface LatencyMetricProps {
+interface LatencyValueProps {
   emphasized?: boolean;
-  label: string;
   value: number | null | undefined;
 }
 
-function LatencyMetric({ emphasized = false, label, value }: LatencyMetricProps) {
+function LatencyValue({ emphasized = false, value }: LatencyValueProps) {
   const unavailable = value === null || value === undefined;
   return (
-    <div className={emphasized ? "latency-total" : undefined}>
-      <dt>{label}</dt>
-      <dd className={unavailable ? "metric-unavailable" : undefined}>
-        {formatNullableMetric(value, "ms")}
-      </dd>
-    </div>
+    <span
+      role="cell"
+      className={`${emphasized ? "latency-total" : ""} ${
+        unavailable ? "metric-unavailable" : ""
+      }`.trim()}
+    >
+      {formatNullableMetric(value, "ms")}
+    </span>
   );
 }
 
