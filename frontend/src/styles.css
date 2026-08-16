@@ -216,6 +216,104 @@ h2 {
   padding: 16px;
 }
 
+.performance-panel > h2 {
+  margin-bottom: 14px;
+}
+
+.camera-latency-list {
+  display: grid;
+  gap: 10px;
+}
+
+.camera-latency-card {
+  background: #f7f9fa;
+  border: 1px solid #d8e0e5;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.camera-latency-card header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.camera-latency-card h3 {
+  color: #26343d;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.camera-status-dot {
+  background: #398650;
+  border: 3px solid #dff1e4;
+  border-radius: 50%;
+  height: 12px;
+  width: 12px;
+}
+
+.latency-metrics {
+  gap: 0;
+}
+
+.latency-metrics > div {
+  border-top: 1px solid #e1e7eb;
+  min-height: 31px;
+  padding: 6px 0;
+}
+
+.latency-metrics dt {
+  color: #61717c;
+  font-size: 0.78rem;
+}
+
+.latency-metrics dd {
+  color: #26343d;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.latency-metrics .latency-total {
+  border-top-color: #bdd7c5;
+}
+
+.latency-total dt,
+.latency-total dd {
+  color: #245d34;
+  font-weight: 750;
+}
+
+.latency-metrics .metric-unavailable {
+  color: #87949c;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.performance-summary-title {
+  color: #657580;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  margin: 18px 0 10px;
+  text-transform: uppercase;
+}
+
+.performance-summary {
+  gap: 9px;
+}
+
+.performance-summary dt,
+.performance-summary dd {
+  font-size: 0.84rem;
+}
+
+.performance-summary dd {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .panel-warning {
   background: #fff4ce;
   border: 1px solid #f1c75b;
